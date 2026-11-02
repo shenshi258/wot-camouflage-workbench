@@ -6,6 +6,14 @@
 
 WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.3 R1 includes 35 importable and exportable AE effect presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
 
+### Features
+
+- **Camouflage:** search an index built from the selected client; combine colors, patterns, weathering and named image decals, or reuse a recipe. Generate resources and an optional `.wotmod`.
+- **3D painting:** preview a stock vehicle or an existing single-vehicle camouflage, place images on a model surface, and adjust their position, size and angle.
+- **Model editing:** create a Blender project for a selected part and LOD, edit its mesh and export with read-back checks. Other LODs require separate work.
+- **Lighting:** open an existing camouflage or project in the light editor, select light surfaces, adjust colors and animation recipes, and preview the result.
+- **AE effects:** import transparent animations or use 35 presets; position effects, fit them to armor, crop, scale and configure mirrored sides.
+- **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
 ### Download and run
 
 Download the **3.3 R1 portable ZIP** from [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases), extract it to a writable folder, and run `启动wot涂装工作台 3.3.cmd`. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
@@ -27,6 +35,16 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ---
 
 ## 中文版
+
+### 功能介绍
+
+- **涂装制作：** 从所选客户端建立车型索引，组合颜色、图案、做旧和指定图片贴花，也可用配方再次生成；输出资源和可选 `.wotmod`。
+- **三维贴图：** 预览原版车型或同车已有涂装，在模型表面放置图片并调整位置、大小和角度。
+- **模型编辑：** 为选定部件和 LOD 创建 Blender 工程，编辑网格并导出回读检查；其他 LOD 需分别处理。
+- **灯效制作：** 导入已有涂装或工程，选择灯面，调整颜色和动画配方并预览。
+- **AE 特效：** 导入透明动画或使用 35 款预设，调整位置、贴合装甲、裁剪、长宽及左右双侧。
+- **校验与安装：** 查看产物报告和哈希，向所选客户端安装并备份，按安装记录回滚。文件校验不能代替游戏内测试。
+
 便携版请从 Releases 下载，解压到可写目录后运行「启动wot涂装工作台 3.3.cmd」。本仓库为 3.3 R1 源码与预设；源码不包含便携版运行环境。内置全部 35 款可导入、导出的 AE 特效预设，并附有「预设预览」：32 秒动态总览、离线搜索页面与逐款动画。
 
 ## 可选液态玻璃界面
@@ -63,6 +81,7 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ## 致谢
 
 感谢 コイカツ 和 GPT 对本项目的帮助与支持。
+
 
 
 
