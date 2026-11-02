@@ -1,5 +1,32 @@
-# wot涂装工作台 3.3
+# WOT 涂装工作台 3.3 R1 / WOT Camouflage Workbench
 
+[中文版](#中文版) | [English](#english)
+
+## English
+
+WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.3 R1 includes 35 importable and exportable AE effect presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
+
+### Download and run
+
+Download the **3.3 R1 portable ZIP** from [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases), extract it to a writable folder, and run `启动wot涂装工作台 3.3.cmd`. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
+
+### R1 changes
+
+- Locks the AE tint-intensity slider and light-effect recovery controls during processing, restoring their previous states afterwards.
+- Updates existing dropdown colors when switching themes.
+- Retains all 35 presets and adds no changes to native effect assets in this revision.
+
+### Validation
+
+The existing release record reports background regression and isolated desktop UI checks. The original EU Pz70 camouflage was a **user-confirmed** working baseline. An offline generated sample was inspected, but complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). Check the actual game client and version before use, and verify loading, visibility and effects in game.
+
+### Acknowledgements
+
+Thanks to **コイカツ** and **GPT** for their help and support.
+
+---
+
+## 中文版
 便携版请从 Releases 下载，解压到可写目录后运行「启动wot涂装工作台 3.3.cmd」。本仓库为 3.3 R1 源码与预设；源码不包含便携版运行环境。内置全部 35 款可导入、导出的 AE 特效预设，并附有「预设预览」：32 秒动态总览、离线搜索页面与逐款动画。
 
 ## 可选液态玻璃界面
@@ -36,4 +63,6 @@
 ## 致谢
 
 感谢 コイカツ 和 GPT 对本项目的帮助与支持。
+
+
 
