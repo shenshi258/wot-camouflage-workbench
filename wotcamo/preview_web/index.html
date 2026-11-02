@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>wot涂装工作台 3.3 · 三维预览</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;font:14px "Microsoft YaHei UI",sans-serif;background:#0b111c;color:#e6edf8}
+body{display:flex;flex-direction:column}header{background:#101a2b;border-bottom:1px solid #273951;padding:10px 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+h1{font-size:17px;margin:0;font-weight:650;letter-spacing:.2px}#vehicle{color:#9bc4ff;font-weight:600}.badge{margin-left:auto;color:#b0c4df;background:#1d2d43;border:1px solid #314764;border-radius:20px;padding:4px 10px;font-size:12px}
+#tools{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:8px 18px;background:#101b2a;border-bottom:1px solid #24364d}.toolGroup{display:flex;align-items:center;gap:6px;padding-right:10px;border-right:1px solid #2a3c54}.toolGroup:last-child{border-right:0}
+[hidden]{display:none!important}#paintTools{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:9px 18px;background:#16243a;border-bottom:1px solid #30425b}.step{color:#9bb7d9;font-size:12px;font-weight:600}#paintStatus{color:#c0d4ee;font-size:12px;flex:1;min-width:220px}
+button,select,input[type=file]::file-selector-button{font:inherit;color:#e3eaf4;background:#203149;border:1px solid #3a506c;border-radius:6px;padding:6px 10px;cursor:pointer}button:hover,select:hover,input[type=file]::file-selector-button:hover{background:#2b4565}button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid #8cc7ff;outline-offset:2px}button:disabled{opacity:.55;cursor:wait}#paintExport{background:#2768ba;border-color:#3f87dc;color:white;font-weight:600}#paintExport:hover{background:#327bd2}
+select{padding:6px}label{display:flex;align-items:center;gap:6px;color:#c5d4e8;font-size:13px}input[type=file]{font:12px "Microsoft YaHei UI",sans-serif;max-width:250px;color:#c5d4e8}input[type=file]::file-selector-button{font-size:12px;padding:5px 8px;margin-right:6px}input[type=range]{width:90px;accent-color:#79b5ff}input[type=checkbox]{accent-color:#79b5ff}
+#viewport{position:relative;flex:1;min-height:0}canvas{display:block;width:100%;height:100%;touch-action:none}#selectionRect{position:absolute;display:none;border:1px solid #63cfff;background:#34aaff33;pointer-events:none;z-index:5}#message{position:absolute;left:18px;top:18px;max-width:600px;padding:10px 14px;background:#111d2ddc;border:1px solid #30425a;border-radius:6px;pointer-events:none}#message:empty{display:none}
+#stats{position:absolute;right:16px;top:16px;color:#b7c8dd;font:12px Consolas,monospace;background:#0c1521cc;padding:8px 10px;border-radius:6px;pointer-events:none;white-space:pre-line}
+footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #273951;background:#101b2a;display:flex;justify-content:space-between;gap:20px}details{max-width:65%}summary{cursor:pointer}#warnings{max-height:100px;overflow:auto;white-space:pre-line;margin:8px 0}#hint{white-space:nowrap}
+</style>
+<link rel="stylesheet" href="./ui-theme.css">
+<script type="importmap">{"imports":{"three":"./vendor/build/three.module.js","three/addons/":"./vendor/examples/jsm/"}}</script></head>
+<body><header><span class="brandMark" aria-hidden="true"></span><h1>wot涂装工作台 3.3</h1><span id="modeTitle">三维实时预览</span><span id="vehicle">正在读取整车…</span><button id="themeToggle" type="button" title="切换预览窗口的界面风格">界面：经典</button><span class="badge">本地预览 · 游戏效果待验证</span></header>
+<div id="tools">
+<div class="toolGroup" id="selectionTools"><button id="box" title="框选屏幕投影中的车体三角面，包括遮挡面；请旋转检查高亮。">框选车体：关</button><button id="applyArea" title="将高亮三角面发送到制作器，可选择贴图或独立灯效。">使用选区</button><button id="clearArea" title="清除车体高亮选区，不修改输入。">清除选区</button></div>
+<div class="toolGroup"><button id="fit">适应整车</button><select id="part" title="查看部件"><option value="all">整车</option><option value="chassis">底盘 / 轮灯</option><option value="hull">车体</option><option value="turret">炮塔</option><option value="gun">炮管</option></select></div>
+<div class="toolGroup"><select id="quality" title="预览性能档"><option value="fast">流畅 · 30 帧上限</option><option value="balanced" selected>均衡 · 60 帧上限</option><option value="fine">高画质 · 60 帧上限</option></select><label><input type="checkbox" id="bloom" checked>泛光</label><label><input type="checkbox" id="bright">明亮背景</label><label><input type="checkbox" id="wire">线框</label></div>
+<div class="toolGroup"><label>炮塔<input id="yaw" type="range" min="-180" max="180" value="0"><span id="yawValue">0°</span></label><label>炮管<input id="pitch" type="range" min="-10" max="20" value="0"><span id="pitchValue">0°</span></label></div>
+<div class="toolGroup" id="playbackTools"><button id="play">暂停</button><button id="restart">重播</button></div>
+</div>
+<div id="paintTools" hidden>
+<span class="step">点击模型表面</span><label>导入图片 <input id="paintFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
+<label>大小 <input id="paintScale" type="range" min="0.01" max="1" step="0.01" value="0.2"><span id="paintScaleValue">20%</span></label>
+<label>角度 <input id="paintAngle" type="range" min="-180" max="180" step="1" value="0"><span id="paintAngleValue">0°</span></label>
+<button id="paintSave" title="固定当前图片的位置，继续添加下一张；Ctrl+S。关闭前请生成涂装包。">保存当前贴图（Ctrl+S）</button><span id="paintCount">已保存 0 张</span>
+<button id="paintUndo" disabled>撤销上一张</button><button id="paintClear">清除当前图片</button>
+<label>成品包名称 <input id="paintName" type="text" maxlength="100" placeholder="填写成品名称" style="width:160px;background:#203149;color:#e3eaf4;border:1px solid #3a506c;border-radius:6px;padding:6px"></label>
+<button id="paintExport">生成涂装包</button>
+<span id="paintStatus">点击模型并导入图片，顺序不限；共用 UV 的位置会同步变化。</span>
+</div>
+<div id="aeTools" hidden style="padding:8px 18px;background:#16243a;border-bottom:1px solid #30425b;display:flex;gap:15px;align-items:center">
+<strong>AE 透明动画</strong><label title="把特效镜像到车辆中线另一侧。独立平面、贴面播放和贴面发光都可使用；左右不对称车型建议分别选面。"><input id="aeMirror" type="checkbox">左右双侧显示</label><button id="aeNewPlane" title="沿用当前素材，新建矩形动画平面并重置裁剪与四角变形；替换当前承载方式，不叠加第二层。">新建流动平面</button><button id="aeResetWarp" title="恢复矩形，保留平面位置和当前素材。">重置变形</button><button id="aeSnap" title="点击后再点装甲，自动选择承载范围并立即贴合；以点击处为素材中心。">吸附装甲</button><label title="吸附时扩展到同一部件上同侧、同一平面的装甲，允许跨材质分块；取消后只选相连小面。旧选区需重新吸附才会变化。"><input id="aeWholeArmor" type="checkbox" checked>整块装甲</label><button id="aePlace" title="只移动独立平面，不改变它的朝向或贴合装甲。">点击模型放置</button><button id="aeDrag" title="独立平面可直接在模型上拖动：拖面移动、拖四角控制点拉动变形、拖边中点拉伸那一边；按住 Shift 拖动沿法线移入移出。关闭后拖动只旋转视角。">拖动变形：开</button><button id="aePick">点选承载面：关</button><select id="aePickKind" title="选择单个三角面，或自动扩展到同一网格内相连的平面"><option value="triangle">单个三角面</option><option value="planar">相连平面</option></select><span id="aeFrame">等待素材</span><span>吸附会自动贴合；点选/框选后用“使用选区”调整范围。</span>
+<details id="aeAdjust"><summary>缩放与裁剪</summary><div id="aeAdjustFields">
+<label title="相对于承载选区的整体倍率">整体 <input id="aeScale" data-ae-param="uv_scale" type="range" min="0.05" max="8" step="0.05" value="1"><output>1×</output></label>
+<label title="只改变特效长度，两个方向不联动">长度 <input id="aeScaleX" data-ae-param="uv_scale_x" type="range" min="0.05" max="8" step="0.05" value="1"><output>1×</output></label>
+<label title="只改变特效宽度，两个方向不联动">宽度 <input id="aeScaleY" data-ae-param="uv_scale_y" type="range" min="0.05" max="8" step="0.05" value="1"><output>1×</output></label>
+<label>裁左 <input data-ae-param="crop_left" type="range" min="0" max="99" step="1" value="0"><output>0%</output></label>
+<label>裁右 <input data-ae-param="crop_right" type="range" min="0" max="99" step="1" value="0"><output>0%</output></label>
+<label>裁上 <input data-ae-param="crop_top" type="range" min="0" max="99" step="1" value="0"><output>0%</output></label>
+<label>裁下 <input data-ae-param="crop_bottom" type="range" min="0" max="99" step="1" value="0"><output>0%</output></label>
+</div><span>拖动后松开应用；装甲边界自动裁切。四边裁剪保持剩余图像原位。</span></details>
+</div>
+<div id="aeColorTools" hidden><label title="选择颜色后会启用着色；不会改变透明边缘。">特效颜色 <input id="aeTintColor" type="color" value="#ffffff"></label><label title="0% 保留素材原色；100% 改成所选颜色。">着色强度 <input id="aeTintStrength" type="range" min="0" max="100" step="1" value="0"><output id="aeTintValue">0%</output></label><button id="aeTintReset">恢复素材原色</button></div>
+<div id="viewport"><div id="selectionRect"></div><div id="message">正在读取模型与贴图，首次加载会建立缓存…</div><div id="stats"></div></div>
+<footer><details id="operationHelp"><summary>操作说明</summary><div id="operationHelpText">旋转模型确认目标灯面，再点击或框选。Shift 加选，Ctrl 减选。配方在灯效窗口调整，修改后回到这里观察。</div></details><details id="notes"><summary>预览说明与资源提示</summary><div>基础材质与泛光为近似显示，不执行游戏原生着色器。当前展示静止履带；姿态控制为预览操作。游戏整车、LOD 与开镜状态仍须实测。</div><div id="warnings"></div></details><span id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击灯面选取 · 框选模式按住左键拖动，Shift 加选 / Ctrl 减选（包含遮挡面）</span></footer>
+<script>
+// One persisted preference is shared with every editor and preview session.
+(()=>{let glass=false,pending=false;const b=document.getElementById('themeToggle');b.disabled=true;
+function update(){document.body.classList.toggle('glass-ui',glass);b.textContent=glass?'界面：液态玻璃':'界面：经典'}
+window.applyWorkbenchTheme=value=>{if(!pending&&typeof value==='boolean'){glass=value;update();b.disabled=false}};
+b.addEventListener('click',async()=>{if(pending)return;pending=true;b.disabled=true;try{
+ const response=await fetch('./theme',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({glass:!glass})});
+ if(!response.ok)throw Error('无法保存界面设置');const result=await response.json();glass=result.glass;update();
+}catch(error){alert('界面风格未保存，请检查程序目录是否可写。')}finally{pending=false;b.disabled=false}});update()})();
+</script><script type="module" src="./preview.js"></script></body></html>

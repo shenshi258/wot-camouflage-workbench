@@ -1,0 +1,44 @@
+/* The preview keeps a dark 3D stage, with the same white/blue controls as Tk. */
+:root{--ui-bg:#f5f5f7;--ui-card:#fff;--ui-ink:#1d1d1f;--ui-muted:#64748b;--ui-border:#dfe5ed;--ui-accent:#007aff}
+.brandMark{width:34px;height:34px;flex:0 0 34px;border-radius:50%;background:radial-gradient(circle,#007aff 0 5px,#b4d8ff 5px 11px,#edf4ff 11px)}
+html,body{background:#f5f5f7;color:#1d1d1f}
+header,#tools,#paintTools,#aeTools,footer{background:#fff!important;border-color:#dfe5ed;color:#1d1d1f}
+header{gap:12px}h1{font-size:17px}#modeTitle{color:#64748b;font-size:13px}
+#vehicle{color:#2662a8}.badge{background:#edf4ff;border-color:#d8e6fb;color:#2662a8}
+button,select,input[type=file]::file-selector-button{background:#f4f7fb;color:#1d1d1f;border-color:#d8e0ea;border-radius:7px;padding:7px 10px}
+button:hover,select:hover,input[type=file]::file-selector-button:hover{background:#e8f1ff}
+button:disabled{background:#e7edf5!important;color:#607188!important;border-color:#d3dce9!important;opacity:1;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline-color:#007aff}
+#paintExport{background:#007aff;color:#fff;border-color:#007aff}#paintExport:hover{background:#086be0}
+label,input[type=file],.step,#paintStatus{color:#526179}input[type=range],input[type=checkbox]{accent-color:#007aff}
+#paintName{background:#fff!important;color:#1d1d1f!important;border-color:#d8e0ea!important}
+.toolGroup{border-color:#dfe5ed;flex-wrap:wrap;max-width:100%}
+#aeTools{flex-wrap:wrap;gap:9px!important}#aeTools span{font-size:12px;color:#64748b}
+#viewport{background:#0b111c;min-height:160px}
+footer{flex-wrap:wrap;gap:8px}details{max-width:100%}#hint{white-space:normal;line-height:1.6;color:#64748b}
+@media(max-width:850px){header,#tools,#paintTools,#aeTools,footer{padding-left:12px;padding-right:12px}.badge{margin-left:0}h1{font-size:15px}#stats{right:8px;top:8px}#message{left:8px;top:8px;max-width:65%}}
+@media(max-height:650px){html{overflow:auto}body{height:auto;min-height:100%;overflow:visible}#viewport{flex:1 0 280px;min-height:280px}}
+#aeAdjust{max-width:100%;flex-basis:100%;color:#64748b}
+#aeAdjustFields{display:flex;flex-wrap:wrap;gap:10px 18px;padding:10px 0}
+#aeAdjustFields label{color:#1d1d1f}
+#aeAdjustFields output{min-width:40px;color:#64748b;font-variant-numeric:tabular-nums}
+#aeAdjust summary{display:inline-block;padding:6px 10px;border:1px solid var(--ui-border);border-radius:7px;background:#f4f7fb;color:var(--ui-ink)}
+#message{background:rgba(255,255,255,.95);color:var(--ui-ink);border-color:var(--ui-border);box-shadow:0 4px 18px #0002;line-height:1.6}
+#stats{background:rgba(255,255,255,.93);color:var(--ui-muted);border:1px solid var(--ui-border)}
+#operationHelp{position:relative}#operationHelp[open]>div{position:absolute;bottom:calc(100% + 12px);left:0;width:min(540px,80vw);max-height:180px;overflow:auto;background:var(--ui-card);color:var(--ui-ink);border:1px solid var(--ui-border);border-radius:8px;padding:12px 14px;box-shadow:0 4px 20px #0003;line-height:1.8;z-index:30}
+
+#aeColorTools{padding:7px 18px;background:#f5f8fc;border-bottom:1px solid #dfe5ed;display:flex;gap:16px;flex-wrap:wrap;align-items:center}#aeColorTools output{min-width:35px}#aeTintColor{width:40px;height:28px;border:1px solid #d8e0ea;padding:1px;border-radius:5px;background:white}
+
+/* The shared preference changes controls only, not the 3D scene or artwork. */
+body.glass-ui{--ui-card:#f1f9ff;--ui-border:#aed4e9}
+body.glass-ui header,body.glass-ui #tools,body.glass-ui #paintTools,body.glass-ui #aeTools,body.glass-ui footer{
+ background:linear-gradient(110deg,rgba(234,248,255,.96),rgba(244,250,255,.91))!important;
+ border-color:#aed4e9;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)
+}
+body.glass-ui button:not(:disabled),body.glass-ui select:not(:disabled){background:linear-gradient(#f5fcff,#dbf0fb);border-color:#a8d1e5}
+body.glass-ui button:not(:disabled):hover,body.glass-ui select:not(:disabled):hover{background:#d3edf9}
+body.glass-ui #paintExport:not(:disabled){background:#007aff;border-color:#007aff;color:#fff}
+body.glass-ui #aeColorTools{background:#e9f7fd;border-color:#aed4e9}
+body.glass-ui #aeAdjust summary{background:#e5f4fc;border-color:#aed4e9}
+body.glass-ui #paintName{background:#f8fcff!important;border-color:#b8d9ea!important}
+body.glass-ui #message,body.glass-ui #stats{background:rgba(241,249,255,.96);border-color:#aed4e9}

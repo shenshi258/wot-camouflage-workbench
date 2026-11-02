@@ -1,0 +1,7 @@
+{
+  "wot_root": "",
+  "blender": "tools/blender/blender.exe",
+  "result_dir": "result",
+  "materials_dir": "materials",
+  "index_file": "data/vehicles.json"
+}

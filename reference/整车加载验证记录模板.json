@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "artifact": {
+    "path": null,
+    "sha256": null
+  },
+  "baseline": {
+    "path": null,
+    "sha256": null,
+    "status": "not_tested",
+    "confirmed_by": null,
+    "evidence": []
+  },
+  "environment": {
+    "client_root": null,
+    "realm": null,
+    "version": null,
+    "tank": null,
+    "vehicle_configuration": null,
+    "graphics_settings": null,
+    "related_resource_overrides": []
+  },
+  "file_validation": {
+    "status": "not_tested",
+    "evidence": []
+  },
+  "offline_validation": {
+    "status": "not_tested",
+    "scope": [],
+    "evidence": []
+  },
+  "in_game_tested": false,
+  "whole_vehicle_loading": {
+    "status": "not_tested",
+    "tested_at": null,
+    "observed_by": null,
+    "installed_sha256": null,
+    "cases": {
+      "hangar_initial_load": "not_tested",
+      "hangar_reload_and_restart": "not_tested",
+      "turret_gun_tracks_suspension": "not_tested",
+      "distance_lod_and_applicable_variants": "not_tested",
+      "effect_cycles_and_applicable_render_branches": "not_tested",
+      "test_interval_logs_reviewed": "not_tested",
+      "sniper_camera_visibility": "not_tested"
+    },
+    "log_path": null,
+    "log_start_line": null,
+    "log_end_line": null,
+    "evidence": [],
+    "failure": null,
+    "limitations": []
+  }
+}

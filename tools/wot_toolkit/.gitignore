@@ -1,0 +1,27 @@
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+
+*.blend1
+*.blend2
+*.blend3
+*.blend4
+*.blend@
+
+# Obsidian
+.obsidian/
+.trash/
+
+*.dll
+
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+
+Thumbs.db
+.DS_Store
