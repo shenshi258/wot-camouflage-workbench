@@ -16,7 +16,7 @@ SUFFIX = '.aepreset'
 # Vehicle-specific placement and selection belong to the open project, never a preset.
 BASE_SETTINGS = ('fps', 'width', 'brightness', 'plane', 'angle', 'blend',
             'lift', 'uv_scale', 'u_offset', 'v_offset')
-SETTINGS = BASE_SETTINGS + ('uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','tint_color','tint_strength') + ae.WARPS
+SETTINGS = BASE_SETTINGS + ('uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','tint_color','tint_strength','contrast','transparency') + ae.WARPS
 CLIP_KEYS = ('schema', 'atlas_sha256', 'size', 'frame_size', 'packed_frame_size',
              'rects', 'frames', 'alpha')
 MAX_ARCHIVE = ae.MAX_BYTES + 256 * 1024
@@ -160,7 +160,7 @@ def poster(path, size=(280, 180)):
     """Show an actual middle frame with the preset's additive/alpha blend."""
     data, atlas = read(path)
     with Image.open(io.BytesIO(atlas)) as original:
-        image=ae.colorize_rgba(original,data['config'])
+        image=ae.appearance_rgba(original,data['config'])
         rect = data['clip']['rects'][data['clip']['frames']//2]
         crop = (math.floor(rect[0]*image.width), math.floor(rect[1]*image.height),
                 math.ceil(rect[2]*image.width), math.ceil(rect[3]*image.height))

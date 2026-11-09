@@ -163,7 +163,15 @@ class AEImporter(tk.Tk):
         for corner,caption in [('tl','左上'),('tr','右上'),('br','右下'),('bl','左下')]:
             for axis,label in [('x','横向'),('y','纵向'),('z','深度')]:self.plane_widgets.append(field(deform,caption+' · '+label,'warp_'+corner+'_'+axis))
         self.button(deform,'重置四角变形',self.reset_deform).pack(anchor='w',pady=8)
-        field(play,'播放帧率','fps');field(play,'亮度倍率','brightness');choice(play,'透明方式',self.blend,BLENDS)
+        field(play,'播放帧率','fps');choice(play,'透明方式',self.blend,BLENDS)
+        adjustments=ttk.LabelFrame(play,text='亮度、对比度与透明度',padding=10);adjustments.pack(fill='x',pady=8)
+        self.adjustment_sliders={}
+        for label,key,lo,hi in [('亮度（倍）','brightness',.01,ae.MAX_BRIGHTNESS),('对比度（倍）','contrast',0,3),('透明度（%）','transparency',0,100)]:
+            field(adjustments,label,key)
+            slider=ttk.Scale(adjustments,from_=lo,to=hi,variable=self.values[key],command=lambda value,key=key:self.values[key].set('%.2f'%float(value)))
+            slider.pack(fill='x',pady=(0,6));self.adjustment_sliders[key]=slider
+        self.button(adjustments,'重置亮度、对比度与透明度',self.reset_appearance).pack(anchor='w',pady=4)
+        ttk.Label(adjustments,text='亮度 1 倍、对比度 1 倍为原效果。透明度 0% 保留素材透明度，100% 完全透明。打开三维预览后拖动可同步观察；导出使用相同参数。',wraplength=520,style='Muted.TLabel').pack(anchor='w',pady=6)
         colors=ttk.LabelFrame(play,text='特效颜色',padding=10);colors.pack(fill='x',pady=8)
         field(colors,'颜色（#RRGGBB）','tint_color')
         row=ttk.Frame(colors);row.pack(fill='x',pady=5)
@@ -498,6 +506,9 @@ class AEImporter(tk.Tk):
         try:strength=float(self.values['tint_strength'].get() or '0')
         except ValueError:strength=0
         if not 0<strength<=100:self.values['tint_strength'].set('100')
+
+    def reset_appearance(self):
+        for key in ('brightness','contrast','transparency'):self.values[key].set(str(ae.DEFAULTS[key]))
 
     def choose_effect_color(self):
         current=self.values['tint_color'].get()

@@ -97,9 +97,9 @@ class Session:
                         outer.events.put(dict(type='effectplace',part=data['part'],position=point))
                     elif route=='effectparams':
                         from . import ae_effects
-                        allowed={'tint_color','tint_strength','uv_scale','uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','x','y','z','mirror'}|set(ae_effects.WARPS)
+                        allowed={'brightness','contrast','transparency','tint_color','tint_strength','uv_scale','uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','x','y','z','mirror'}|set(ae_effects.WARPS)
                         move={'x','y','z'}|set(ae_effects.WARPS)
-                        if not outer.effect or not data or not set(data)<=allowed:raise ValueError('只允许调整 AE 缩放、裁剪、位置与四角变形。')
+                        if not outer.effect or not data or not set(data)<=allowed:raise ValueError('只允许调整 AE 外观、缩放、裁剪、位置与四角变形。')
                         if outer.effect['config']['placement']!='plane' and set(data)&move:raise ValueError('贴面模式只能调整缩放与裁剪，位置和变形属于独立平面。')
                         values=ae_effects.config(dict(outer.effect['config'],**data))
                         outer.events.put(dict(type='effectparams',values={key:values[key] for key in data}))

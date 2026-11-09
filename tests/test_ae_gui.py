@@ -11,6 +11,16 @@ class AEGUITests(unittest.TestCase):
     def test_precise_image_rotation_is_saved_without_light_flow_buttons(self):
         self.app.values['angle'].set('37');self.assertEqual(self.app.collect()['angle'],37)
         self.assertFalse(hasattr(self.app,'direction_buttons'))
+
+    def test_appearance_sliders_save_values_and_reset_independently_of_placement(self):
+        for key,value in [('brightness',100),('contrast',2),('transparency',65)]:
+            self.app.adjustment_sliders[key].set(value)
+        self.app.update()
+        c=self.app.collect()
+        self.assertEqual((c['brightness'],c['contrast'],c['transparency']),(100,2,65))
+        self.app.values['x'].set('2');self.app.reset_appearance()
+        c=self.app.collect();self.assertEqual((c['brightness'],c['contrast'],c['transparency']),(1,1,0))
+        self.assertEqual(c['x'],2)
     def test_surface_modes_expose_only_relevant_controls(self):
         self.app.placement.set('贴面播放');self.app.update()
         self.assertTrue(self.app.fields['x'].instate(['disabled']));self.assertTrue(self.app.fields['lift'].instate(['disabled']))

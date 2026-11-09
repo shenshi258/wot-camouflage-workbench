@@ -1,10 +1,10 @@
-# WOT 涂装工作台 3.3 R1 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.4 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
 ## English
 
-WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.3 R1 includes 35 importable and exportable AE effect presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
+WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.4 includes 35 importable and exportable AE effect presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
 
 ### Features
 
@@ -14,11 +14,17 @@ WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tank
 - **Lighting:** open an existing camouflage or project in the light editor, select light surfaces, adjust colors and animation recipes, and preview the result.
 - **AE effects:** import transparent animations or use 35 presets; position effects, fit them to armor, crop, scale and configure mirrored sides.
 - **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
+### New in 3.4: AE appearance sliders
+
+Open the AE window, then select **播放与透明** (Playback and transparency). Brightness (0.01–100×), contrast (0–3×), and transparency (0–100%) can be adjusted with sliders or numeric input. The 3D preview has the same three sliders. Transparency 0% preserves the source alpha; 100% makes the effect invisible. Reset restores 1× / 1× / 0%.
+
+Settings are saved in editable projects and exported presets, and applied to generated packages. Existing projects and presets use neutral defaults for the new controls. Previously generated packages must be generated again. Very high brightness can wash out highlights. Native shader rendering and in-game effects still need testing.
+
 ### Download and run
 
-Download the **3.3 R1 portable ZIP** from [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases), extract it to a writable folder, and run `启动wot涂装工作台 3.3.cmd`. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
+Download the **3.4 portable ZIP** from [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases), extract it to a writable folder, and run `启动wot涂装工作台 3.4.cmd`. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
 
-### R1 changes
+### Earlier R1 changes
 
 - Locks the AE tint-intensity slider and light-effect recovery controls during processing, restoring their previous states afterwards.
 - Updates existing dropdown colors when switching themes.
@@ -36,6 +42,12 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 
 ## 中文版
 
+### 3.4 新增：AE 外观滑条
+
+打开 AE 窗口，进入 **播放与透明** 页，可拖动或输入：**亮度 0.01～100 倍、对比度 0～3 倍、透明度 0～100%**。三维预览也提供相同滑条。透明度 0% 保留素材原透明度，100% 完全透明；一键重置恢复 1 倍 / 1 倍 / 0%。
+
+参数随 AE 工程、导出预设和新生成的涂装包保存。旧工程和预设读取时，新增参数采用中性默认值；旧成品需重新生成。高亮度可能使高光发白。游戏原生着色器及实际效果仍待实测。
+
 ### 功能介绍
 
 - **涂装制作：** 从所选客户端建立车型索引，组合颜色、图案、做旧和指定图片贴花，也可用配方再次生成；输出资源和可选 `.wotmod`。
@@ -45,7 +57,7 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 - **AE 特效：** 导入透明动画或使用 35 款预设，调整位置、贴合装甲、裁剪、长宽及左右双侧。
 - **校验与安装：** 查看产物报告和哈希，向所选客户端安装并备份，按安装记录回滚。文件校验不能代替游戏内测试。
 
-便携版请从 Releases 下载，解压到可写目录后运行「启动wot涂装工作台 3.3.cmd」。本仓库为 3.3 R1 源码与预设；源码不包含便携版运行环境。内置全部 35 款可导入、导出的 AE 特效预设，并附有「预设预览」：32 秒动态总览、离线搜索页面与逐款动画。
+便携版请从 Releases 下载，解压到可写目录后运行「启动wot涂装工作台 3.4.cmd」。本仓库为 3.4 源码与预设；源码不包含便携版运行环境。内置全部 35 款可导入、导出的 AE 特效预设，并附有「预设预览」：32 秒动态总览、离线搜索页面与逐款动画。
 
 ## 可选液态玻璃界面
 
@@ -53,7 +65,7 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 
 本次统一了主窗口、AE、灯效窗口的参数选项卡、输入框、列表、滚动区域和帮助提示的配色及交互状态；切换风格时同步变化。预览图和颜色样本保持其原有颜色。
 
-## R1 界面问题修订
+## 此前 R1 界面问题修订
 
 - AE 处理期间，着色强度滑条现在与其他参数一起锁定，处理结束后恢复原状态。
 - 灯效处理期间，「恢复自动保存工程」同步锁定，并在操作入口阻止中途更换来源。所有参数采用统一的忙碌状态逻辑，恢复时保留原本禁用或只读的状态。
@@ -75,12 +87,13 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 
 完成 84 项无窗口后台回归、32 项隔离桌面真实界面检查、双侧拖动脚本检查、全部 35 款预设与动态预览检查。包内自带运行环境另执行 39 项后台检查与同一套 32 项界面检查；后两组属于复核，不计为新增测试。界面测试在独立桌面运行，不切换当前桌面，不操作游戏。
 
-此前以用户确认可正常使用的欧服 Pz70 原涂装为基线，离线生成玻璃双侧样例并回读 96 帧、192 个材质及两侧网格；原始资源逐字节保留。原包存在一处既有炮塔网格分组警告，该项未改动。此前欧服客户端资源检查为 2.4.1.1 #989。离线样例的整车状态为 not_tested；此次 R1 仅修订工作台界面，未重新生成该样例或启动、安装游戏。实际整车加载、玻璃效果、遮挡和远近显示需游戏内验证。你的实际客户端更新后需重新核对。
+此前以用户确认可正常使用的欧服 Pz70 原涂装为基线，离线生成玻璃双侧样例并回读 96 帧、192 个材质及两侧网格；原始资源逐字节保留。原包存在一处既有炮塔网格分组警告，该项未改动。3.3 时的欧服客户端资源检查为 2.4.1.1 #989。离线样例的整车状态为 not_tested；此次 R1 仅修订工作台界面，未重新生成该样例或启动、安装游戏。实际整车加载、玻璃效果、遮挡和远近显示需游戏内验证。你的实际客户端更新后需重新核对。
 
 
 ## 致谢
 
 感谢 コイカツ 和 GPT 对本项目的帮助与支持。
+
 
 
 

@@ -179,6 +179,11 @@ function loadEffect(info){
   groups[info.part].add(object);effectMeshes.push(object);
  });effectRoot=root;scene.add(root);buildHandles(info);
  $('aeColorTools').hidden=false;$('aeTintColor').value=info.config.tint_color||'#FFFFFF';$('aeTintStrength').value=info.config.tint_strength||0;$('aeTintValue').textContent=Number($('aeTintStrength').value).toFixed(0)+'%';$('aeMirror').checked=!!info.config.mirror;$('aeTools').hidden=false;$('selectionTools').hidden=false;$('modeTitle').textContent='AE 特效 · 三维预览';
+ $('aeAppearanceTools').hidden=false;
+ for(const input of document.querySelectorAll('[data-ae-appearance]')){
+  if(document.activeElement!==input)input.value=info.config[input.dataset.aeAppearance]??(input.dataset.aeAppearance==='transparency'?0:1);
+  showAppearanceValue(input);
+ }
  $('operationHelpText').textContent='独立平面：拖动任一侧发光面可移动，拖原侧四角或边控制点可同步变形；Shift 拖动沿法线移入移出。双侧平面需放在车体一侧，横向位置为 0 时会重合。贴面可点“吸附装甲”或点选/框选后“使用选区”。套用预设时贴面保留当前映射方向。生成涂装 ZIP 会附带本次特效预设。';
  $('aePlace').hidden=info.config.placement!=='plane';$('aeResetWarp').hidden=info.config.placement!=='plane';
  if($('aeDrag')){$('aeDrag').hidden=info.config.placement!=='plane';$('aeDrag').textContent='拖动变形：'+(deformEnabled?'开':'关');}
@@ -820,3 +825,16 @@ $('aeTintColor').onchange=()=>{if(Number($('aeTintStrength').value)===0)$('aeTin
 $('aeTintStrength').oninput=()=>{$('aeTintValue').textContent=$('aeTintStrength').value+'%';};
 $('aeTintStrength').onchange=sendTint;
 $('aeTintReset').onclick=()=>{$('aeTintStrength').value=0;$('aeTintValue').textContent='0%';sendTint();};
+
+function showAppearanceValue(input){input.nextElementSibling.textContent=Number(input.value).toFixed(input.dataset.aeAppearance==='transparency'?0:2)+(input.dataset.aeAppearance==='transparency'?'%':' 倍');}
+let appearanceTimer=null;
+async function sendAppearance(){
+ const values=Object.fromEntries(Array.from(document.querySelectorAll('[data-ae-appearance]'),input=>[input.dataset.aeAppearance,Number(input.value)]));
+ try{const response=await post('effectparams',values);if(!response.ok){const error=await response.json();throw Error(error.error||'外观调整未应用');}$('message').textContent='正在同步亮度、对比度与透明度…';}
+ catch(error){$('message').textContent=String(error);}
+}
+for(const input of document.querySelectorAll('[data-ae-appearance]')){
+ input.oninput=()=>{showAppearanceValue(input);clearTimeout(appearanceTimer);appearanceTimer=setTimeout(sendAppearance,150);};
+ input.onchange=()=>{clearTimeout(appearanceTimer);sendAppearance();};
+}
+$('aeAppearanceReset').onclick=()=>{clearTimeout(appearanceTimer);for(const input of document.querySelectorAll('[data-ae-appearance]')){input.value=input.dataset.aeAppearance==='transparency'?0:1;showAppearanceValue(input);}sendAppearance();};

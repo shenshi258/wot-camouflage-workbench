@@ -46,6 +46,12 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 </div><span>拖动后松开应用；装甲边界自动裁切。四边裁剪保持剩余图像原位。</span></details>
 </div>
 <div id="aeColorTools" hidden><label title="选择颜色后会启用着色；不会改变透明边缘。">特效颜色 <input id="aeTintColor" type="color" value="#ffffff"></label><label title="0% 保留素材原色；100% 改成所选颜色。">着色强度 <input id="aeTintStrength" type="range" min="0" max="100" step="1" value="0"><output id="aeTintValue">0%</output></label><button id="aeTintReset">恢复素材原色</button></div>
+<div id="aeAppearanceTools" hidden>
+<label title="1 倍为原亮度，最高 100 倍；高倍率可能让高光发白。">亮度 <input data-ae-appearance="brightness" type="range" min="0.01" max="100" step="0.01" value="1"><output>1 倍</output></label>
+<label title="1 倍保持原对比度；围绕中灰调整 RGB，不改变透明边缘。">对比度 <input data-ae-appearance="contrast" type="range" min="0" max="3" step="0.01" value="1"><output>1 倍</output></label>
+<label title="0% 保留素材透明度，100% 完全透明。">透明度 <input data-ae-appearance="transparency" type="range" min="0" max="100" step="1" value="0"><output>0%</output></label>
+<button id="aeAppearanceReset">重置亮度、对比度与透明度</button>
+</div>
 <div id="viewport"><div id="selectionRect"></div><div id="message">正在读取模型与贴图，首次加载会建立缓存…</div><div id="stats"></div></div>
 <footer><details id="operationHelp"><summary>操作说明</summary><div id="operationHelpText">旋转模型确认目标灯面，再点击或框选。Shift 加选，Ctrl 减选。配方在灯效窗口调整，修改后回到这里观察。</div></details><details id="notes"><summary>预览说明与资源提示</summary><div>基础材质与泛光为近似显示，不执行游戏原生着色器。当前展示静止履带；姿态控制为预览操作。游戏整车、LOD 与开镜状态仍须实测。</div><div id="warnings"></div></details><span id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击灯面选取 · 框选模式按住左键拖动，Shift 加选 / Ctrl 减选（包含遮挡面）</span></footer>
 <script>

@@ -16,6 +16,8 @@ DEFAULTS=dict(fps=24.,width=1.25,brightness=1.,x=-1.82,y=0.,z=0.,part='hull',pla
 WARPS=tuple('warp_%s_%s'%(corner,axis) for corner in ('tl','tr','br','bl') for axis in ('x','y','z'))
 DEFAULTS.update({key:0. for key in WARPS})
 DEFAULTS.update(tint_color='#FFFFFF',tint_strength=0.)
+DEFAULTS.update(contrast=1.,transparency=0.)
+MAX_BRIGHTNESS=100.
 # A 8x8 grid bends around a pulled corner instead of only skewing two triangles.
 PLANE_SEGMENTS=8
 MANIFEST=re.compile(r'res/particles/ae_import_([0-9a-f]{12})/manifest\.json')
@@ -23,7 +25,7 @@ PACKAGE_CONFLICT_NOTE='同一车型只启用一份涂装或 AE 特效包；更�
 
 def config(value):
     c=dict(DEFAULTS);c.update(value)
-    for k,lo,hi in [('tint_strength',0,100),('fps',1,60),('width',.01,20),('brightness',.01,10),('x',-30,30),('y',-30,30),('z',-30,30),('angle',-180,180),('lift',.001,.1),('uv_scale',.05,8),('uv_scale_x',.05,8),('uv_scale_y',.05,8),('u_offset',-2,2),('v_offset',-2,2)]+[(key,0,99) for key in ('crop_left','crop_right','crop_top','crop_bottom')]+[(key,-2.,2.) for key in WARPS]:
+    for k,lo,hi in [('contrast',0,3),('transparency',0,100),('tint_strength',0,100),('fps',1,60),('width',.01,20),('brightness',.01,MAX_BRIGHTNESS),('x',-30,30),('y',-30,30),('z',-30,30),('angle',-180,180),('lift',.001,.1),('uv_scale',.05,8),('uv_scale_x',.05,8),('uv_scale_y',.05,8),('u_offset',-2,2),('v_offset',-2,2)]+[(key,0,99) for key in ('crop_left','crop_right','crop_top','crop_bottom')]+[(key,-2.,2.) for key in WARPS]:
         if isinstance(c[k],bool):raise ValueError('参数必须是数值：'+k)
         c[k]=float(c[k])
         if not math.isfinite(c[k]) or not lo<=c[k]<=hi:raise ValueError('参数超出范围：'+k)
@@ -64,16 +66,34 @@ def colorize_rgba(image,values):
     return Image.merge('RGBA',(*blended.split(),alpha))
 
 
+def appearance_rgba(image,values):
+    """Tint, contrast around fixed middle gray, then scale source alpha."""
+    c=config(values);result=colorize_rgba(image,c)
+    if c['contrast']!=1:
+        # Atlas padding must not influence the midpoint. RGB and alpha remain
+        # independent; transparent padding stays transparent at every setting.
+        rgb=result.convert('RGB').point([max(0,min(255,round((v-127.5)*c['contrast']+127.5))) for v in range(256)]*3)
+        result=Image.merge('RGBA',(*rgb.split(),result.getchannel('A')))
+    if c['transparency']!=0:
+        result.putalpha(result.getchannel('A').point([round(v*(1-c['transparency']/100)) for v in range(256)]))
+    return result
+
+
 def colorized_clip(clip,values,folder):
-    """Cache a recoloured copy; editable projects/presets retain source RGB."""
+    """Bake contrast/alpha once from source, identically for preview and DDS.
+
+    Brightness remains the independent material RGB gain (including values
+    above 1), so it is not clipped into an 8-bit texture or applied twice.
+    """
     c=config(values)
-    if c['tint_strength']==0:return clip
+    if c['tint_strength']==0 and c['contrast']==1 and c['transparency']==0:return clip
     validate_clip(clip)
-    key=hashlib.sha256((clip['atlas_sha256']+c['tint_color']+format(c['tint_strength'],'.12g')).encode()).hexdigest()
+    settings={k:c[k] for k in ('tint_color','tint_strength','contrast','transparency')}
+    key=hashlib.sha256((clip['atlas_sha256']+json.dumps(settings,sort_keys=True)).encode()).hexdigest()
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True);target=folder/('tint_'+key+'.png')
     if not target.exists():
         with Image.open(clip['atlas']) as image:
-            result=colorize_rgba(image,c)
+            result=appearance_rgba(image,c)
             temporary=target.with_suffix('.tmp.png');result.save(temporary);temporary.replace(target)
     return dict(clip,atlas=str(target.resolve()),atlas_sha256=engine.digest(target))
 
