@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>wot涂装工作台 3.3 · 三维预览</title>
+<title>{{APP_NAME}} · 三维预览</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;font:14px "Microsoft YaHei UI",sans-serif;background:#0b111c;color:#e6edf8}
 body{display:flex;flex-direction:column}header{background:#101a2b;border-bottom:1px solid #273951;padding:10px 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
@@ -15,7 +15,7 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 </style>
 <link rel="stylesheet" href="./ui-theme.css">
 <script type="importmap">{"imports":{"three":"./vendor/build/three.module.js","three/addons/":"./vendor/examples/jsm/"}}</script></head>
-<body><header><span class="brandMark" aria-hidden="true"></span><h1>wot涂装工作台 3.3</h1><span id="modeTitle">三维实时预览</span><span id="vehicle">正在读取整车…</span><button id="themeToggle" type="button" title="切换预览窗口的界面风格">界面：经典</button><span class="badge">本地预览 · 游戏效果待验证</span></header>
+<body><header><span class="brandMark" aria-hidden="true"></span><h1>{{APP_NAME}}</h1><span id="modeTitle">三维实时预览</span><span id="vehicle">正在读取整车…</span><button id="themeToggle" type="button" title="切换预览窗口的界面风格">界面：经典</button><span class="badge">本地预览 · 游戏效果待验证</span></header>
 <div id="tools">
 <div class="toolGroup" id="selectionTools"><button id="box" title="框选屏幕投影中的车体三角面，包括遮挡面；请旋转检查高亮。">框选车体：关</button><button id="applyArea" title="将高亮三角面发送到制作器，可选择贴图或独立灯效。">使用选区</button><button id="clearArea" title="清除车体高亮选区，不修改输入。">清除选区</button></div>
 <div class="toolGroup"><button id="fit">适应整车</button><select id="part" title="查看部件"><option value="all">整车</option><option value="chassis">底盘 / 轮灯</option><option value="hull">车体</option><option value="turret">炮塔</option><option value="gun">炮管</option></select></div>
@@ -47,10 +47,10 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 </div>
 <div id="aeColorTools" hidden><label title="选择颜色后会启用着色；不会改变透明边缘。">特效颜色 <input id="aeTintColor" type="color" value="#ffffff"></label><label title="0% 保留素材原色；100% 改成所选颜色。">着色强度 <input id="aeTintStrength" type="range" min="0" max="100" step="1" value="0"><output id="aeTintValue">0%</output></label><button id="aeTintReset">恢复素材原色</button></div>
 <div id="aeAppearanceTools" hidden>
-<label title="1 倍为原亮度，最高 100 倍；高倍率可能让高光发白。">亮度 <input data-ae-appearance="brightness" type="range" min="0.01" max="100" step="0.01" value="1"><output>1 倍</output></label>
-<label title="1 倍保持原对比度；围绕中灰调整 RGB，不改变透明边缘。">对比度 <input data-ae-appearance="contrast" type="range" min="0" max="3" step="0.01" value="1"><output>1 倍</output></label>
-<label title="0% 保留素材透明度，100% 完全透明。">透明度 <input data-ae-appearance="transparency" type="range" min="0" max="100" step="1" value="0"><output>0%</output></label>
-<button id="aeAppearanceReset">重置亮度、对比度与透明度</button>
+<label title="范围 0.01～100 倍，1 倍为原亮度。拖动同步预览和制作器；高倍率可能使高光发白。">亮度（倍） <input data-ae-appearance="brightness" type="range" min="0.01" max="100" step="0.01" value="1"><output>1.00 倍</output></label>
+<label title="范围 0～3 倍，1 倍保持原对比度。0 倍将可见图案变为中灰，不等于隐藏；不改变透明边缘。">对比度（倍） <input data-ae-appearance="contrast" type="range" min="0" max="3" step="0.01" value="1"><output>1.00 倍</output></label>
+<label title="范围 0～100%。0% 保留素材透明度，100% 完全透明；发光叠加也会减弱。">透明度（%） <input data-ae-appearance="transparency" type="range" min="0" max="100" step="0.01" value="0"><output>0.00%</output></label>
+<button id="aeAppearanceReset" title="恢复亮度 1 倍、对比度 1 倍、透明度 0%；保留素材、着色、位置和双侧设置。">重置亮度、对比度与透明度</button>
 </div>
 <div id="viewport"><div id="selectionRect"></div><div id="message">正在读取模型与贴图，首次加载会建立缓存…</div><div id="stats"></div></div>
 <footer><details id="operationHelp"><summary>操作说明</summary><div id="operationHelpText">旋转模型确认目标灯面，再点击或框选。Shift 加选，Ctrl 减选。配方在灯效窗口调整，修改后回到这里观察。</div></details><details id="notes"><summary>预览说明与资源提示</summary><div>基础材质与泛光为近似显示，不执行游戏原生着色器。当前展示静止履带；姿态控制为预览操作。游戏整车、LOD 与开镜状态仍须实测。</div><div id="warnings"></div></details><span id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击灯面选取 · 框选模式按住左键拖动，Shift 加选 / Ctrl 减选（包含遮挡面）</span></footer>

@@ -826,7 +826,8 @@ $('aeTintStrength').oninput=()=>{$('aeTintValue').textContent=$('aeTintStrength'
 $('aeTintStrength').onchange=sendTint;
 $('aeTintReset').onclick=()=>{$('aeTintStrength').value=0;$('aeTintValue').textContent='0%';sendTint();};
 
-function showAppearanceValue(input){input.nextElementSibling.textContent=Number(input.value).toFixed(input.dataset.aeAppearance==='transparency'?0:2)+(input.dataset.aeAppearance==='transparency'?'%':' 倍');}
+// 与桌面数值输入保持两位小数，避免已保存的透明度被页面静默取整。
+function showAppearanceValue(input){input.nextElementSibling.textContent=Number(input.value).toFixed(2)+(input.dataset.aeAppearance==='transparency'?'%':' 倍');}
 let appearanceTimer=null;
 async function sendAppearance(){
  const values=Object.fromEntries(Array.from(document.querySelectorAll('[data-ae-appearance]'),input=>[input.dataset.aeAppearance,Number(input.value)]));
@@ -834,6 +835,7 @@ async function sendAppearance(){
  catch(error){$('message').textContent=String(error);}
 }
 for(const input of document.querySelectorAll('[data-ae-appearance]')){
+ // 拖动时短暂合并请求，松开立即提交；贴图重算由制作器后台执行。
  input.oninput=()=>{showAppearanceValue(input);clearTimeout(appearanceTimer);appearanceTimer=setTimeout(sendAppearance,150);};
  input.onchange=()=>{clearTimeout(appearanceTimer);sendAppearance();};
 }

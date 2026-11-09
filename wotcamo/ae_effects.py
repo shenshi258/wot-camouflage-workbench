@@ -67,14 +67,15 @@ def colorize_rgba(image,values):
 
 
 def appearance_rgba(image,values):
-    """Tint, contrast around fixed middle gray, then scale source alpha."""
+    """依次着色、调对比度、缩放原始 Alpha；亮度由材质单独处理。"""
     c=config(values);result=colorize_rgba(image,c)
     if c['contrast']!=1:
-        # Atlas padding must not influence the midpoint. RGB and alpha remain
-        # independent; transparent padding stays transparent at every setting.
+        # 以固定中灰 127.5 为中心，避免图集透明留白改变明暗基准。
+        # 对比度只修改 RGB；透明留白和软边的 Alpha 在此保持不变。
         rgb=result.convert('RGB').point([max(0,min(255,round((v-127.5)*c['contrast']+127.5))) for v in range(256)]*3)
         result=Image.merge('RGBA',(*rgb.split(),result.getchannel('A')))
     if c['transparency']!=0:
+        # UI 的透明度越大越透明：0% 保留原 Alpha，100% 清零。
         result.putalpha(result.getchannel('A').point([round(v*(1-c['transparency']/100)) for v in range(256)]))
     return result
 
@@ -82,8 +83,9 @@ def appearance_rgba(image,values):
 def colorized_clip(clip,values,folder):
     """Bake contrast/alpha once from source, identically for preview and DDS.
 
-    Brightness remains the independent material RGB gain (including values
-    above 1), so it is not clipped into an 8-bit texture or applied twice.
+    每次从原图计算，避免重复打开/拖动造成对比度与透明度累积。
+    亮度继续使用材质倍率（可大于 1），避免写进 8 位纹理后截断，
+    也避免预览、导出各自再乘一次亮度。
     """
     c=config(values)
     if c['tint_strength']==0 and c['contrast']==1 and c['transparency']==0:return clip

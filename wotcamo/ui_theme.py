@@ -103,6 +103,22 @@ def configure_notebook_tabs(style,glass=False):
               bordercolor=[('selected',selected_border)],
               lightcolor=[('selected',selected_border)],darkcolor=[('selected',selected_border)])
 
+def configure_scales(style,glass=False):
+    """滑条与按钮共用蓝色强调色，主题切换时同时恢复所有状态。"""
+    normal='#8ac8e6' if glass else '#7eb6ee'
+    trough='#d9edf8' if glass else '#e7edf5'
+    disabled='#c0d4df' if glass else '#c1ccd9'
+    border='#a8d1e5' if glass else '#a5caee'
+    for orient in ('Horizontal','Vertical'):
+        name=orient+'.TScale'
+        style.configure(name,background=normal,troughcolor=trough,bordercolor=border,
+                        lightcolor=normal,darkcolor=normal,borderwidth=1,sliderlength=20)
+        # 禁用优先于悬停/焦点；忙碌时不能仍显示为可操作的蓝色。
+        for option in ('background','lightcolor','darkcolor'):
+            style.map(name,**{option:[('disabled',disabled),('pressed','#086be0'),('active','#52a1ed')]})
+        style.map(name,bordercolor=[('disabled',disabled),('focus',ACCENT)],
+                  troughcolor=[('disabled','#eaf2f6' if glass else '#f0f3f7')])
+
 def configure_theme(app):
     glass=theme_preference()
     app.configure(background=BG)
@@ -182,6 +198,7 @@ def configure_theme(app):
         style.configure('Badge.TLabel',background='#d5effb',foreground='#17658f')
         configure_notebook_tabs(style,glass=True)
         app.configure(background='#dbeefa')
+    configure_scales(style,glass)
     refresh_registered_widgets(app,glass)
     refresh_combobox_popdowns(app,glass)
     return style

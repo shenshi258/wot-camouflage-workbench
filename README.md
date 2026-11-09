@@ -1,4 +1,4 @@
-# WOT 涂装工作台 3.4 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.4 R1 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
@@ -14,6 +14,10 @@ WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tank
 - **Lighting:** open an existing camouflage or project in the light editor, select light surfaces, adjust colors and animation recipes, and preview the result.
 - **AE effects:** import transparent animations or use 35 presets; position effects, fit them to armor, crop, scale and configure mirrored sides.
 - **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
+### 3.4 R1 UI review
+
+Slider palettes and disabled/focus states now follow both themes. Preview branding uses the current application version; decimal precision and help text are aligned. Key appearance-processing code has explanatory comments.
+
 ### New in 3.4: AE appearance sliders
 
 Open the AE window, then select **播放与透明** (Playback and transparency). Brightness (0.01–100×), contrast (0–3×), and transparency (0–100%) can be adjusted with sliders or numeric input. The 3D preview has the same three sliders. Transparency 0% preserves the source alpha; 100% makes the effect invisible. Reset restores 1× / 1× / 0%.
@@ -41,6 +45,10 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ---
 
 ## 中文版
+
+### 3.4 R1 界面复核
+
+滑条统一主题配色和禁用/焦点状态；预览和灯效入口统一当前版本文字；外观栏统一小数精度，并补全悬停说明和关键代码注释。
 
 ### 3.4 新增：AE 外观滑条
 
@@ -93,8 +101,3 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ## 致谢
 
 感谢 コイカツ 和 GPT 对本项目的帮助与支持。
-
-
-
-
-

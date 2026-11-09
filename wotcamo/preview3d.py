@@ -1,5 +1,6 @@
 """Local-only 3D preview session, asset worker and independent WebView2 window."""
 import argparse
+import html
 import json
 import mimetypes
 import os
@@ -70,7 +71,11 @@ class Session:
                         if not file.is_relative_to(web.resolve()):return self.send(404,b'Not found')
                     if not file.is_file():return self.send(404,b'Not found')
                     kind='text/javascript' if file.suffix=='.js' else mimetypes.guess_type(file.name)[0] or 'application/octet-stream'
-                    return self.send(200,file.read_bytes(),kind)
+                    payload=file.read_bytes()
+                    if route in ('','index.html'):
+                        # 预览页与桌面标题取同一版本源，避免发新版时漏改 HTML。
+                        payload=payload.replace(b'{{APP_NAME}}',html.escape(APP_NAME).encode('utf-8'))
+                    return self.send(200,payload,kind)
                 except (OSError,ValueError):return self.send(503,dict(message='资源正在更新'))
             def do_POST(self):
                 route=self.route();origin=self.headers.get('Origin')

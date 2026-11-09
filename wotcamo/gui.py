@@ -8,7 +8,7 @@ import sys
 from .light_tooltips import HoverHelp
 from .workbench_help import TEXT as HELP_TEXT, topic
 from .ui_theme import configure_theme, build_header, BG, register_widget, style_listbox, lock_controls, unlock_controls, start_progress, stop_progress
-from . import APP_NAME
+from . import APP_NAME,__version__
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 from PIL import Image, ImageTk
@@ -434,7 +434,7 @@ class Workbench(tk.Tk):
         ttk.Label(page,text='套用 35 款内置预设，或导入透明 PNG；支持装甲吸附、裁剪及贴面横纵独立缩放。',style='PageSubtitle.TLabel',wraplength=850).pack(anchor='w',pady=(6,18))
         card=ttk.Frame(page,style='Panel.TFrame',padding=18);card.pack(fill='x')
         ttk.Label(card,text='使用自己的特效素材',style='Section.TLabel').pack(anchor='w')
-        ttk.Label(card,text='支持帧率、尺寸、位置、朝向、亮度及透明混合调整；可保存工程后继续编辑。',style='PageSubtitle.TLabel').pack(anchor='w',pady=10)
+        ttk.Label(card,text='支持帧率、尺寸、位置、朝向及透明混合；亮度、对比度、透明度可滑动调节，参数可随工程保存。',style='PageSubtitle.TLabel').pack(anchor='w',pady=10)
         self.button(card,'打开 AE 特效导入',self.open_ae,True).pack(anchor='w')
         ttk.Label(page,text='AE 请选择 RGB＋Alpha，推荐直通透明。预览与导出共用帧序、尺寸和混合方式；游戏曝光与泛光仍需实测。',style='PageSubtitle.TLabel',wraplength=850).pack(anchor='w',pady=18)
 
@@ -448,7 +448,7 @@ class Workbench(tk.Tk):
         ttk.Label(page, text='导入涂装，框选区域或灯面，再设置光效配方。', style='PageSubtitle.TLabel').pack(anchor='w', pady=(3, 15))
         card = ttk.Frame(page, style='Panel.TFrame', padding=18)
         card.pack(fill='x')
-        ttk.Label(card, text='灯效制作器  ·  3.3', style='Section.TLabel').pack(anchor='w')
+        ttk.Label(card, text='灯效制作器  ·  '+__version__, style='Section.TLabel').pack(anchor='w')
         ttk.Label(card, text='在独立编辑窗口中选择灯面、预览效果并生成待测包。', style='PageSubtitle.TLabel', wraplength=850).pack(anchor='w', pady=(5, 12))
         row = ttk.Frame(card, style='Card.TFrame'); row.pack(anchor='w')
         self.button(row, '打开灯效制作器', lambda: self.open_light(False), True).pack(side='left')

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from xml.etree import ElementTree as ET
 from PIL import Image
-from wotcamo import ae_effects as ae,ae_presets,preview3d
+from wotcamo import APP_NAME,ae_effects as ae,ae_presets,preview3d
 
 
 class AppearanceTests(unittest.TestCase):
@@ -58,6 +58,25 @@ class AppearanceTests(unittest.TestCase):
             for bad in (dict(brightness=101),dict(contrast=float('inf')),dict(transparency=101)):
                 with self.assertRaises(urllib.error.HTTPError):request(bad)
         finally:session.close()
+    def test_preview_header_matches_desktop_and_controls_keep_decimal_transparency(self):
+        session=preview3d.Session(self.project,None,launch=False)
+        try:
+            with urllib.request.urlopen(session.url) as response:page=response.read().decode('utf-8')
+            self.assertIn('<h1>'+APP_NAME+'</h1>',page)
+            self.assertIn('<title>'+APP_NAME+' · 三维预览</title>',page)
+            self.assertNotIn('{{APP_NAME}}',page)
+            from html.parser import HTMLParser
+            class Inputs(HTMLParser):
+                def __init__(self):super().__init__();self.rows={}
+                def handle_starttag(self,tag,attrs):
+                    row=dict(attrs)
+                    if tag=='input' and 'data-ae-appearance' in row:self.rows[row['data-ae-appearance']]=row
+            fields=Inputs();fields.feed(page)
+            self.assertEqual(set(fields.rows),{'brightness','contrast','transparency'})
+            self.assertEqual(float(fields.rows['brightness']['max']),ae.MAX_BRIGHTNESS)
+            for row in fields.rows.values():self.assertEqual(float(row['step']),.01)
+        finally:session.close()
+
     def test_export_writes_gain_once_and_matches_preview_pixels_for_both_blends(self):
         # Synthetic client/source: this checks the authoring pipeline, never
         # claims native shader execution, Python 2.7 validity or game loading.

@@ -1,5 +1,5 @@
 """Build an independent 3.4 portable release from the preserved 3.3 R1 ZIP."""
-import argparse,ast,hashlib,json,os,shutil,subprocess,sys,zipfile
+import argparse,ast,hashlib,json,os,re,shutil,subprocess,sys,unittest,zipfile
 from pathlib import Path,PurePosixPath
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from wotcamo.common import ROOT
@@ -13,14 +13,21 @@ def copy(source,target):
 
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('--workspace',type=Path,required=True)
+    parser.add_argument('--revision',default='')
+    parser.add_argument('--backend-log',type=Path,default=ROOT/'.cache/appearance34_tests.log')
+    parser.add_argument('--ui-log',type=Path,default=ROOT/'.cache/appearance34_ui.log')
     args=parser.parse_args();workspace=args.workspace.resolve()
+    if args.revision and not re.fullmatch(r'R[1-9][0-9]*',args.revision):parser.error('修订名须为 R1、R2 等。')
     old='wot涂装工作台 3.3_35款预设版_R1';name='wot涂装工作台 3.4_AE外观调节版'
+    if args.revision:name+='_'+args.revision
     base=workspace/'交付'/(old+'.zip');out=workspace/'交付'/name;source=out.with_name(name+'_源码')
     target=out.parent/(name+'.zip')
     if any(p.exists() for p in (out,source,target)):raise RuntimeError('目标已存在；请保留旧交付并改用新修订名。')
     assert digest(base)=='797cd6206dd7f7ed882813d28fa6759fe0d2125ca478190867b1292ad52c4429'
-    for filename,count in [('appearance34_tests.log',79),('appearance34_ui.log',33)]:
-        log=(ROOT/'.cache'/filename).read_text(encoding='utf-8')
+    tests=['tests.test_ae_appearance','tests.test_ae_color','tests.test_ae_presets','tests.test_ae_effects','tests.test_ae_mirrorfix','tests.test_ae_review_fixes','tests.test_ae_sides','tests.test_ae_deform','tests.test_ae_surface','tests.test_glass32']
+    backend_count=unittest.defaultTestLoader.loadTestsFromNames(tests).countTestCases()
+    for path,count in [(args.backend_log,backend_count),(args.ui_log,36)]:
+        log=path.read_text(encoding='utf-8')
         assert 'Ran %d tests'%count in log and '\nOK\n' in log
     with zipfile.ZipFile(base) as z:
         assert z.testzip() is None
@@ -47,18 +54,17 @@ def main():
         if p.is_file() and '__pycache__' not in p.parts:
             rel=p.relative_to(ROOT/'wotcamo');assert digest(p)==digest(program/'wotcamo'/rel)==digest(source/'wotcamo'/rel)
     evidence=out/'验证记录';evidence.mkdir()
-    for file in ('appearance34_tests.log','appearance34_ui.log'):shutil.copy2(ROOT/'.cache'/file,evidence/file)
+    for path in (args.backend_log,args.ui_log):shutil.copy2(path,evidence/path.name)
     env=dict(os.environ,PYTHONHOME=str(program/'runtime'),PYTHONNOUSERSITE='1',PYTHONPATH='',PYTHONDONTWRITEBYTECODE='1',PYTHONIOENCODING='utf-8')
-    tests=['tests.test_ae_appearance','tests.test_ae_color','tests.test_ae_presets','tests.test_ae_effects','tests.test_ae_mirrorfix','tests.test_ae_review_fixes','tests.test_ae_sides','tests.test_ae_deform','tests.test_ae_surface']
     # Run the same backend suite against the exact shipped program/runtime.
-    code="import sys,unittest;sys.path.append(sys.argv[1]);r=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(sys.argv[2:]));raise SystemExit(0 if r.testsRun==79 and r.wasSuccessful() else 1)"
+    code="import sys,unittest;sys.path.append(sys.argv[1]);r=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(sys.argv[3:]));raise SystemExit(0 if r.testsRun==int(sys.argv[2]) and r.wasSuccessful() else 1)"
     with (evidence/'包内后台复核.txt').open('w',encoding='utf-8') as log:
-        run=subprocess.run([str(program/'runtime/python.exe'),'-s','-B','-c',code,str(source),*tests],cwd=program,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=0x08000000)
+        run=subprocess.run([str(program/'runtime/python.exe'),'-s','-B','-c',code,str(source),str(backend_count),*tests],cwd=program,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=0x08000000)
     assert run.returncode==0,(evidence/'包内后台复核.txt').read_text(encoding='utf-8')
     with (evidence/'包内界面复核.txt').open('w',encoding='utf-8') as log:
         run=subprocess.run([str(program/'runtime/python.exe'),'-s','-B',str(source/'tools/check_ui33_isolated.py'),'--program',str(program),'--tests',str(source)],cwd=program,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=0x08000000)
     assert run.returncode==0,(evidence/'包内界面复核.txt').read_text(encoding='utf-8')
-    verification=dict(version='3.4',base_sha256=digest(base),background_tests=79,isolated_desktop_tests=33,packaged_runtime_recheck=True,presets=35,
+    verification=dict(version='3.4',revision=args.revision,base_sha256=digest(base),background_tests=backend_count,isolated_desktop_tests=36,packaged_runtime_recheck=True,presets=35,
         export_test_scope='Synthetic fixtures; PNG/DDS equality and material gain/blend readback. No game or native shader execution.',
         actual_running_client='not_confirmed',in_game_tested=False,whole_vehicle_loading=dict(status='not_tested'),visual_effect_observation='not_tested')
     (evidence/'验证范围.json').write_text(json.dumps(verification,ensure_ascii=False,indent=2),encoding='utf-8')
