@@ -50,9 +50,9 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
     (out/'启动wot涂装工作台 3.3.cmd').rename(out/('启动wot涂装工作台 '+version+'.cmd'))
     program=out/'程序';copy(ROOT/'wotcamo',program/'wotcamo')
     for folder in ('wotcamo','tests','tools','config','blender','reference','预设'):copy(ROOT/folder,source/folder)
-    for parent in (out,program,source):
-        for filename in ('README.md',version+'更新说明.md'):shutil.copy2(ROOT/filename,parent/filename)
-    (out/'使用说明.txt').write_text('wot涂装工作台 '+version+'\n运行“启动wot涂装工作台 '+version+'.cmd”。\nAE 可复制/粘贴设置，在“长宽与贴合”选择等比适配或重复平铺；三维预览展开“缩放与裁剪”也可使用。\n亮度最高 100 倍；透明度 0% 保留原透明度，100% 完全透明。旧成品需重新生成；游戏内效果待实测。详见本版更新说明。\n',encoding='utf-8-sig')
+    # 项目介绍、双语更新说明及致谢保留在源码中，不附进便携包。
+    for filename in ('README.md',version+'更新说明.md'):shutil.copy2(ROOT/filename,source/filename)
+    (out/'使用说明.txt').write_text('wot涂装工作台 '+version+'\n运行“启动wot涂装工作台 '+version+'.cmd”。\nAE 可复制/粘贴设置，在“长宽与贴合”选择等比适配或重复平铺；三维预览展开“缩放与裁剪”也可使用。\n亮度最高 100 倍；透明度 0% 保留原透明度，100% 完全透明。旧成品需重新生成；游戏内效果待实测。\n',encoding='utf-8-sig')
     records,issues=ae_presets.scan(program/'预设/AE特效');assert len(records)==35 and not issues
     for row in records:
         ae_presets.read(row['path'])
