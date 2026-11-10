@@ -178,7 +178,7 @@ function loadEffect(info){
   const object=new THREE.Mesh(geo,material);object.position.fromArray(position);object.userData={kind:'ae',part:info.part};
   groups[info.part].add(object);effectMeshes.push(object);
  });effectRoot=root;scene.add(root);buildHandles(info);
- $('aeColorTools').hidden=false;$('aeTintColor').value=info.config.tint_color||'#FFFFFF';$('aeTintStrength').value=info.config.tint_strength||0;$('aeTintValue').textContent=Number($('aeTintStrength').value).toFixed(0)+'%';$('aeMirror').checked=!!info.config.mirror;$('aeTools').hidden=false;$('selectionTools').hidden=false;$('modeTitle').textContent='AE 特效 · 三维预览';
+ $('aeColorTools').hidden=false;syncTintControls(info.config);$('aeMirror').checked=!!info.config.mirror;$('aeTools').hidden=false;$('selectionTools').hidden=false;$('modeTitle').textContent='AE 特效 · 三维预览';
  $('aeAppearanceTools').hidden=false;
  $('aeFitMode').value=info.config.fit_mode||'stretch';
  for(const input of document.querySelectorAll('[data-ae-appearance]')){
@@ -831,14 +831,34 @@ window.addEventListener('beforeunload',()=>{navigator.sendBeacon(url('closed'),J
 
 $('aeMirror').onchange=async()=>{try{const response=await post('effectparams',{mirror:$('aeMirror').checked});if(!response.ok)throw Error('双侧设置未应用');$('message').textContent='正在更新左右双侧显示…';}catch(error){$('aeMirror').checked=!!effectInfo.config.mirror;$('message').textContent=String(error);}};
 
-async function sendTint(){
- try{const response=await post('effectparams',{tint_color:$('aeTintColor').value,tint_strength:Number($('aeTintStrength').value)});if(!response.ok){const error=await response.json();throw Error(error.error||'颜色未应用');}$('message').textContent='正在同步特效颜色…';}
- catch(error){$('message').textContent=String(error);}
+// 取色器拖动也会发出 input。合并连续请求，并保留尚未被制作器确认的选择。
+let tintTimer=null,tintSending=false,tintAgain=false,pendingTint=null;
+function tintValues(){return {tint_color:$('aeTintColor').value,tint_strength:Number($('aeTintStrength').value)};}
+function showTintValue(){$('aeTintValue').textContent=$('aeTintStrength').value+'%'+(Number($('aeTintStrength').value)===0?'（原色）':'');}
+function syncTintControls(config){
+ if(pendingTint){
+  if(config.tint_color?.toLowerCase()!==pendingTint.tint_color.toLowerCase()||Number(config.tint_strength)!==pendingTint.tint_strength)return;
+  pendingTint=null;
+ }
+ if(document.activeElement!==$('aeTintColor'))$('aeTintColor').value=config.tint_color||'#FFFFFF';
+ if(document.activeElement!==$('aeTintStrength'))$('aeTintStrength').value=config.tint_strength||0;
+ showTintValue();
 }
-$('aeTintColor').onchange=()=>{if(Number($('aeTintStrength').value)===0)$('aeTintStrength').value=100;$('aeTintValue').textContent=$('aeTintStrength').value+'%';sendTint();};
-$('aeTintStrength').oninput=()=>{$('aeTintValue').textContent=$('aeTintStrength').value+'%';};
+function queueTint(){pendingTint=tintValues();clearTimeout(tintTimer);tintTimer=setTimeout(sendTint,120);}
+async function sendTint(){
+ clearTimeout(tintTimer);tintTimer=null;pendingTint=tintValues();
+ if(tintSending){tintAgain=true;return;}
+ tintSending=true;const requested=pendingTint;
+ try{const response=await post('effectparams',requested);if(!response.ok){const error=await response.json();throw Error(error.error||'颜色未应用');}$('message').textContent='正在同步特效颜色…';}
+ catch(error){if(pendingTint===requested){pendingTint=null;syncTintControls(effectInfo.config);}$('message').textContent=String(error);}
+ finally{tintSending=false;if(tintAgain){tintAgain=false;sendTint();}}
+}
+function pickTint(){if(Number($('aeTintStrength').value)===0)$('aeTintStrength').value=100;showTintValue();}
+$('aeTintColor').oninput=()=>{pickTint();queueTint();};
+$('aeTintColor').onchange=()=>{pickTint();return sendTint();};
+$('aeTintStrength').oninput=()=>{showTintValue();queueTint();};
 $('aeTintStrength').onchange=sendTint;
-$('aeTintReset').onclick=()=>{$('aeTintStrength').value=0;$('aeTintValue').textContent='0%';sendTint();};
+$('aeTintReset').onclick=()=>{$('aeTintStrength').value=0;showTintValue();return sendTint();};
 
 // 与桌面数值输入保持两位小数，避免已保存的透明度被页面静默取整。
 function showAppearanceValue(input){input.nextElementSibling.textContent=Number(input.value).toFixed(2)+(input.dataset.aeAppearance==='transparency'?'%':' 倍');}

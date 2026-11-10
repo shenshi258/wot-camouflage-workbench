@@ -14,7 +14,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote,urlsplit
+from urllib.parse import parse_qs,unquote,urlsplit
 
 from .common import ROOT
 from . import preview3d_assets as assets
@@ -55,7 +55,9 @@ class Session:
                 try:
                     if route=='status':return self.send(200,outer.status())
                     if route=='effect/atlas.png' and outer.effect:
-                        file=outer.folder/'ae_atlas.png'
+                        version=parse_qs(urlsplit(self.path).query).get('v',[''])[0]
+                        if version and not re.fullmatch(r'[a-f0-9]{64}',version):return self.send(404,b'Not found')
+                        file=outer.folder/('ae_atlas_'+version+'.png' if version else 'ae_atlas.png')
                     elif route.startswith('body/'):
                         info=outer.read_json('body.json')
                         if not info:return self.send(202,dict(message='loading'))
@@ -165,7 +167,11 @@ class Session:
         clip=ae_effects.colorized_clip(clip,config,self.folder/'color_cache')
         data=ae_effects.preview_data(clip,config,self.project,self.client)
         if self.effect is None or self.effect['atlas_sha256']!=data['atlas_sha256']:
-            shutil.copyfile(clip['atlas'],self.folder/'ae_atlas.png')
+            # 按哈希保存不可变版本；旧状态请求也能读到对应颜色，不会撞上正在覆盖的 PNG。
+            target=self.folder/('ae_atlas_'+data['atlas_sha256']+'.png')
+            if not target.exists():
+                temporary=target.with_suffix('.tmp.png');shutil.copyfile(clip['atlas'],temporary);temporary.replace(target)
+            temporary=self.folder/'ae_atlas.tmp.png';shutil.copyfile(target,temporary);temporary.replace(self.folder/'ae_atlas.png')
         data['revision']=0 if self.effect is None else self.effect['revision']+1
         self.effect=data
 

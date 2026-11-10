@@ -11,7 +11,7 @@ def digest(path):
 def copy(source,target):
     shutil.copytree(source,target,dirs_exist_ok=True,ignore=shutil.ignore_patterns('.cache','__pycache__','*.bak','result'))
 
-def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_markers=()):
+def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_markers=(),preset_count=35,extra_guide=''):
     if version!=__version__:raise RuntimeError('打包器版本与源码不一致，请使用当前版本的打包入口。')
     parser=argparse.ArgumentParser();parser.add_argument('--workspace',type=Path,required=True)
     parser.add_argument('--revision',default='')
@@ -48,12 +48,12 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
             dest.parent.mkdir(parents=True,exist_ok=True)
             with z.open(entry) as inp,dest.open('wb') as output:shutil.copyfileobj(inp,output)
     (out/'启动wot涂装工作台 3.3.cmd').rename(out/('启动wot涂装工作台 '+version+'.cmd'))
-    program=out/'程序';copy(ROOT/'wotcamo',program/'wotcamo')
+    program=out/'程序';copy(ROOT/'wotcamo',program/'wotcamo');copy(ROOT/'预设',program/'预设')
     for folder in ('wotcamo','tests','tools','config','blender','reference','预设'):copy(ROOT/folder,source/folder)
     # 项目介绍、双语更新说明及致谢保留在源码中，不附进便携包。
     for filename in ('README.md',version+'更新说明.md'):shutil.copy2(ROOT/filename,source/filename)
-    (out/'使用说明.txt').write_text('wot涂装工作台 '+version+'\n运行“启动wot涂装工作台 '+version+'.cmd”。\nAE 可复制/粘贴设置，在“长宽与贴合”选择等比适配或重复平铺；三维预览展开“缩放与裁剪”也可使用。\n亮度最高 100 倍；透明度 0% 保留原透明度，100% 完全透明。旧成品需重新生成；游戏内效果待实测。\n',encoding='utf-8-sig')
-    records,issues=ae_presets.scan(program/'预设/AE特效');assert len(records)==35 and not issues
+    (out/'使用说明.txt').write_text('wot涂装工作台 '+version+'\n运行“启动wot涂装工作台 '+version+'.cmd”。\n'+extra_guide+'AE 可复制/粘贴设置，在“长宽与贴合”选择等比适配或重复平铺；三维预览展开“缩放与裁剪”也可使用。\n亮度最高 100 倍；透明度 0% 保留原透明度，100% 完全透明。旧成品需重新生成；游戏内效果待实测。\n',encoding='utf-8-sig')
+    records,issues=ae_presets.scan(program/'预设/AE特效');assert len(records)==preset_count and not issues
     for row in records:
         ae_presets.read(row['path'])
         assert digest(row['path'])==digest(ROOT/'预设/AE特效'/row['path'].name)
@@ -72,15 +72,16 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
     with (evidence/'包内界面复核.txt').open('w',encoding='utf-8') as log:
         run=subprocess.run([str(program/'runtime/python.exe'),'-s','-B',str(source/'tools/check_ui33_isolated.py'),'--program',str(program),'--tests',str(source)],cwd=program,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=0x08000000)
     assert run.returncode==0,(evidence/'包内界面复核.txt').read_text(encoding='utf-8')
-    verification=dict(version=version,revision=args.revision,base_sha256=digest(base),background_tests=backend_count,isolated_desktop_tests=ui_count,preview_script_checks=list(web_markers),packaged_runtime_recheck=True,presets=35,
+    verification=dict(version=version,revision=args.revision,base_sha256=digest(base),background_tests=backend_count,isolated_desktop_tests=ui_count,preview_script_checks=list(web_markers),packaged_runtime_recheck=True,presets=preset_count,
         export_test_scope='Synthetic fixtures; PNG/DDS, material appearance, aspect fitting, per-tile clipping and preview/export geometry checks. No game or native shader execution.',
         actual_running_client='not_confirmed',in_game_tested=False,whole_vehicle_loading=dict(status='not_tested'),visual_effect_observation='not_tested')
     (evidence/'验证范围.json').write_text(json.dumps(verification,ensure_ascii=False,indent=2),encoding='utf-8')
-    rows=[dict(path=p.relative_to(out).as_posix(),bytes=p.stat().st_size,sha256=digest(p)) for p in out.rglob('*') if p.is_file()]
+    # 包内复核生成的临时会话不进入交付；仅打包经过清单校验的文件。
+    rows=[dict(path=p.relative_to(out).as_posix(),bytes=p.stat().st_size,sha256=digest(p)) for p in out.rglob('*') if p.is_file() and '.cache' not in p.relative_to(out).parts]
     (out/'文件清单.json').write_text(json.dumps(dict(product=name,files=rows),ensure_ascii=False,indent=2),encoding='utf-8')
     with zipfile.ZipFile(target,'x',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
-        for p in out.rglob('*'):
-            if p.is_file():z.write(p,(Path(name)/p.relative_to(out)).as_posix())
+        for row in rows:z.write(out/row['path'],name+'/'+row['path'])
+        z.write(out/'文件清单.json',name+'/文件清单.json')
     with zipfile.ZipFile(target) as z:
         assert z.testzip() is None
         for row in rows:

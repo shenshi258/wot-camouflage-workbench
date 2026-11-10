@@ -48,7 +48,7 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 <label>裁下 <input data-ae-param="crop_bottom" type="range" min="0" max="99" step="1" value="0"><output>0%</output></label>
 </div><span>拖动后松开应用；装甲边界自动裁切。四边裁剪保持剩余图像原位。</span></details>
 </div>
-<div id="aeColorTools" hidden><label title="选择颜色后会启用着色；不会改变透明边缘。">特效颜色 <input id="aeTintColor" type="color" value="#ffffff"></label><label title="0% 保留素材原色；100% 改成所选颜色。">着色强度 <input id="aeTintStrength" type="range" min="0" max="100" step="1" value="0"><output id="aeTintValue">0%</output></label><button id="aeTintReset">恢复素材原色</button></div>
+<div id="aeColorTools" hidden><label title="拖动取色会同步更新并自动启用着色。亮度过高可能发白，可先降低亮度检查色差。">特效颜色 <input id="aeTintColor" type="color" value="#ffffff"></label><label title="0% 保留多彩原色；100% 统一为所选颜色。">着色强度 <input id="aeTintStrength" type="range" min="0" max="100" step="1" value="0"><output id="aeTintValue">0%（原色）</output></label><button id="aeTintReset">恢复素材原色</button></div>
 <div id="aeAppearanceTools" hidden>
 <label title="范围 0.01～100 倍，1 倍为原亮度。拖动同步预览和制作器；高倍率可能使高光发白。">亮度（倍） <input data-ae-appearance="brightness" type="range" min="0.01" max="100" step="0.01" value="1"><output>1.00 倍</output></label>
 <label title="范围 0～3 倍，1 倍保持原对比度。0 倍将可见图案变为中灰，不等于隐藏；不改变透明边缘。">对比度（倍） <input data-ae-appearance="contrast" type="range" min="0" max="3" step="0.01" value="1"><output>1.00 倍</output></label>

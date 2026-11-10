@@ -1,0 +1,15 @@
+{
+  "name": "36 彩色流星雨",
+  "file": "9d158bf07c177c7b640cfadf.aepreset",
+  "sha256": "5d7c20e8fd91a818a386514a689965d2b488117de581951a518eedee1bc076c5",
+  "frames": 96,
+  "fps": 24,
+  "last_to_first_step": 8.66360092163086,
+  "median_adjacent_step": 7.131887912750244,
+  "endpoint_equal": true,
+  "in_game_tested": false,
+  "actual_running_client": "not_confirmed",
+  "whole_vehicle_loading": {
+    "status": "not_tested"
+  }
+}

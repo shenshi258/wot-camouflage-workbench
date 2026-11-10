@@ -90,4 +90,16 @@ class AEColorTests(unittest.TestCase):
             AEImporter.choose_effect_color(app)
         self.assertEqual(app.values['tint_color'].get(),'#68dfff');self.assertEqual(app.values['tint_strength'].get(),'100')
 
+    def test_preview_keeps_each_colour_texture_bound_to_its_hash(self):
+        session=preview3d.Session(self.project(),None,launch=False,effect=(self.clip,ae.config({})))
+        try:
+            first=session.effect['atlas_sha256'];original=(session.folder/'ae_atlas.png').read_bytes()
+            session.update_effect(self.clip,self.c)
+            second=session.effect['atlas_sha256'];coloured=(session.folder/'ae_atlas.png').read_bytes()
+            self.assertNotEqual(first,second)
+            for digest,expected in ((first,original),(second,coloured)):
+                with urllib.request.urlopen(session.url.replace('index.html','effect/atlas.png?v='+digest)) as response:
+                    self.assertEqual(response.read(),expected)
+        finally:session.close()
+
 if __name__=='__main__':unittest.main()

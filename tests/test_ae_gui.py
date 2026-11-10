@@ -12,6 +12,27 @@ class AEGUITests(unittest.TestCase):
         self.app.values['angle'].set('37');self.assertEqual(self.app.collect()['angle'],37)
         self.assertFalse(hasattr(self.app,'direction_buttons'))
 
+    def test_typing_or_pasting_a_colour_enables_tint_and_restore_keeps_original(self):
+        app=self.app;entry=app.fields['tint_color']
+        app.param_tabs.select(4);app.update();entry.focus_force();app.update()
+        entry.delete(0,'end');entry.insert(0,'#00C8FF');entry.event_generate('<KeyRelease>',keysym='f');app.update()
+        self.assertEqual(app.collect()['tint_strength'],100)
+        self.assertEqual(app.collect()['tint_color'],'#00C8FF')
+        app.values['tint_strength'].set('0');app.update()
+        # Navigation alone must not re-enable a deliberately restored colour.
+        entry.event_generate('<KeyRelease>',keysym='Left');app.update()
+        self.assertEqual(app.collect()['tint_strength'],0)
+        entry.delete(0,'end');entry.insert(0,'#FF20A0');entry.event_generate('<FocusOut>');app.update()
+        self.assertEqual(app.collect()['tint_strength'],100)
+        self.assertEqual(app.collect()['tint_color'],'#FF20A0')
+
+    def test_programmatic_colour_restore_does_not_enable_tint(self):
+        app=self.app;values=app.collect();values.update(tint_color='#FF20A0',tint_strength=0)
+        app.param_tabs.select(4);app.update();app.color_entry.focus_force();app.update()
+        app.restore_settings(values);app.update()
+        app.color_entry.event_generate('<FocusOut>');app.update()
+        self.assertEqual(app.collect()['tint_strength'],0)
+
     def test_copy_paste_settings_keeps_current_assets_and_rejects_invalid_clipboard(self):
         from unittest.mock import patch
         app=self.app;clipboard={}

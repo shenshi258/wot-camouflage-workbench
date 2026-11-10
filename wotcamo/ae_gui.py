@@ -183,7 +183,12 @@ class AEImporter(tk.Tk):
         self.button(adjustments,'重置亮度、对比度与透明度',self.reset_appearance).pack(anchor='w',pady=4)
         ttk.Label(adjustments,text='亮度 1 倍、对比度 1 倍为原效果。透明度 0% 保留素材透明度，100% 完全透明。打开三维预览后拖动可同步观察；导出使用相同参数。',wraplength=520,style='Muted.TLabel').pack(anchor='w',pady=6)
         colors=ttk.LabelFrame(play,text='特效颜色',padding=10);colors.pack(fill='x',pady=8)
-        field(colors,'颜色（#RRGGBB）','tint_color')
+        self.color_entry=field(colors,'颜色（#RRGGBB）','tint_color')
+        self._color_entry_value=self.values['tint_color'].get()
+        self.color_entry.bind('<FocusIn>',lambda event:setattr(self,'_color_entry_value',self.values['tint_color'].get()))
+        self.color_entry.bind('<KeyRelease>',self.commit_effect_color)
+        self.color_entry.bind('<FocusOut>',self.commit_effect_color)
+        self.color_entry.bind('<<Paste>>',lambda event:self.after_idle(self.commit_effect_color))
         row=ttk.Frame(colors);row.pack(fill='x',pady=5)
         self.color_swatch=tk.Label(row,width=5,bg='#ffffff',relief='solid',borderwidth=1);self.color_swatch.pack(side='left',padx=(0,8))
         self.button(row,'选择特效颜色…',self.choose_effect_color).pack(side='left')
@@ -193,7 +198,7 @@ class AEImporter(tk.Tk):
         row=ttk.Frame(colors);row.pack(fill='x',pady=4)
         for label,color in [('樱粉','#FF85C2'),('冰蓝','#68DFFF'),('紫晶','#B58AFF'),('鎏金','#FFD06B')]:
             self.button(row,label,lambda color=color:self.set_effect_color(color)).pack(side='left',padx=(0,6))
-        ttk.Label(colors,text='0% 保留素材原色，100% 改为所选颜色；透明边缘和原有明暗细节保留。亮度单独调节，颜色可随预设保存。',wraplength=520,style='Muted.TLabel').pack(anchor='w',pady=7)
+        ttk.Label(colors,text='输入完整色号或取色会自动启用着色。0% 保留多彩原色，100% 统一为所选颜色；透明边缘保留。亮度过高可能发白，可先降低亮度检查色差。',wraplength=520,style='Muted.TLabel').pack(anchor='w',pady=7)
         ttk.Label(play,text='发光叠加适合流星、火焰；普通透明适合烟雾和带遮挡的动画。\n预览和导出共用帧序、尺寸及混合设置，游戏曝光和泛光仍需实测。',wraplength=550,foreground='#58657a').pack(anchor='w',pady=15)
 
     def mode_changed(self,*args):
@@ -304,6 +309,7 @@ class AEImporter(tk.Tk):
         self.plane.set(next(k for k,v in PLANES.items() if v==values['plane']))
         self.blend.set(next(k for k,v in BLENDS.items() if v==values['blend']))
         self.fit_mode.set(next(k for k,v in ae.FIT_MODES.items() if v==values['fit_mode']))
+        self._color_entry_value=values['tint_color']
         self.note.set('已套用 AE 预设“'+data['name']+'”。当前涂装、位置和选区已保留；可继续微调并预览。')
         self.changed()
 
@@ -464,7 +470,7 @@ class AEImporter(tk.Tk):
         self.placement.set(next(k for k,v in PLACEMENTS.items() if v==c['placement']))
         for key,var in self.values.items():var.set(str(c[key]))
         for var,mapping,key in [(self.part,PARTS,'part'),(self.plane,PLANES,'plane'),(self.blend,BLENDS,'blend'),(self.fit_mode,ae.FIT_MODES,'fit_mode')]:var.set(next(k for k,v in mapping.items() if v==c[key]))
-        self.mirror.set(c['mirror']);self.changed()
+        self.mirror.set(c['mirror']);self._color_entry_value=c['tint_color'];self.changed()
 
     def paste_settings(self):
         if self.busy:return
@@ -536,14 +542,22 @@ class AEImporter(tk.Tk):
         self.update_selection_note()
         value=self.values['tint_color'].get()
         if ae.re.fullmatch(r'#[0-9a-fA-F]{6}',value):self.color_swatch.configure(bg=value)
+        if self.focus_get()!=self.color_entry:self._color_entry_value=value
         if self.pending:self.after_cancel(self.pending)
         self.pending=self.after(300,self.update_live)
 
     def set_effect_color(self,color):
+        self._color_entry_value=color
         self.values['tint_color'].set(color)
         try:strength=float(self.values['tint_strength'].get() or '0')
         except ValueError:strength=0
         if not 0<strength<=100:self.values['tint_strength'].set('100')
+
+    def commit_effect_color(self,event=None):
+        """只对实际编辑启用着色；载入工程和恢复原色保持原有的 0%。"""
+        if self.busy:return
+        value=self.values['tint_color'].get()
+        if ae.re.fullmatch(r'#[0-9a-fA-F]{6}',value) and value.casefold()!=self._color_entry_value.casefold():self.set_effect_color(value)
 
     def reset_appearance(self):
         for key in ('brightness','contrast','transparency'):self.values[key].set(str(ae.DEFAULTS[key]))
