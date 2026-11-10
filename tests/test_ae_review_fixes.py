@@ -45,8 +45,8 @@ class AEReviewFixTests(unittest.TestCase):
         calls=[];widget=SimpleNamespace(state=lambda value:None)
         app=SimpleNamespace(events=queue.Queue(),session=SimpleNamespace(events=queue.Queue(),viewer=None,project={}),
                             project={'source_sha256':'a'*64,'ae_surface_origin':{'point':[9,9,9]}},
-                            part=Value('车体'),plane=Value(plane),blend=Value(blend),mirror=Value(True),
-                            values={k:Value(str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','blend','mirror','placement')},
+                            part=Value('车体'),plane=Value(plane),blend=Value(blend),fit_mode=Value('拉伸填充（旧版）'),mirror=Value(True),
+                            values={k:Value(str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','blend','mirror','placement','fit_mode')},
                             selection_note=Value(''),mode_note=Value(''),plane_widgets=[widget],surface_widgets=[widget],
                             fields={'lift':widget},param_tabs=SimpleNamespace(select=lambda index:None),
                             changed=lambda:calls.append('changed'))

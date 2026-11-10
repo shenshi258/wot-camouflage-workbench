@@ -79,7 +79,7 @@ class Session:
                 except (OSError,ValueError):return self.send(503,dict(message='资源正在更新'))
             def do_POST(self):
                 route=self.route();origin=self.headers.get('Origin')
-                if route not in ('select','bodyselect','metrics','closed','performance','paint','effectplace','effectparams','effectplane','theme') or (route=='paint' and not outer.paint) or (origin and origin!='http://127.0.0.1:%d'%outer.server.server_port):
+                if route not in ('select','bodyselect','metrics','closed','performance','paint','effectplace','effectparams','effectplane','effectsettings','theme') or (route=='paint' and not outer.paint) or (origin and origin!='http://127.0.0.1:%d'%outer.server.server_port):
                     return self.send(403,b'Forbidden')
                 try:
                     size=int(self.headers.get('Content-Length','0'))
@@ -94,6 +94,9 @@ class Session:
                     elif route=='effectplane':
                         if not outer.effect or data:raise ValueError('新建平面请求无效。')
                         outer.events.put(dict(type='effectplane'))
+                    elif route=='effectsettings':
+                        if not outer.effect or set(data)!={'action'} or data['action'] not in ('copy','paste'):raise ValueError('设置复刻请求无效。')
+                        outer.events.put(dict(type='effectsettings',action=data['action']))
                     elif route=='effectplace':
                         import math
                         if not outer.effect or data.get('part') not in ('hull','turret','gun'):raise ValueError()
@@ -102,7 +105,7 @@ class Session:
                         outer.events.put(dict(type='effectplace',part=data['part'],position=point))
                     elif route=='effectparams':
                         from . import ae_effects
-                        allowed={'brightness','contrast','transparency','tint_color','tint_strength','uv_scale','uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','x','y','z','mirror'}|set(ae_effects.WARPS)
+                        allowed={'fit_mode','tile_repeat','brightness','contrast','transparency','tint_color','tint_strength','uv_scale','uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','x','y','z','mirror'}|set(ae_effects.WARPS)
                         move={'x','y','z'}|set(ae_effects.WARPS)
                         if not outer.effect or not data or not set(data)<=allowed:raise ValueError('只允许调整 AE 外观、缩放、裁剪、位置与四角变形。')
                         if outer.effect['config']['placement']!='plane' and set(data)&move:raise ValueError('贴面模式只能调整缩放与裁剪，位置和变形属于独立平面。')

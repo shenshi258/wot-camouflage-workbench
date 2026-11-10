@@ -180,6 +180,7 @@ function loadEffect(info){
  });effectRoot=root;scene.add(root);buildHandles(info);
  $('aeColorTools').hidden=false;$('aeTintColor').value=info.config.tint_color||'#FFFFFF';$('aeTintStrength').value=info.config.tint_strength||0;$('aeTintValue').textContent=Number($('aeTintStrength').value).toFixed(0)+'%';$('aeMirror').checked=!!info.config.mirror;$('aeTools').hidden=false;$('selectionTools').hidden=false;$('modeTitle').textContent='AE 特效 · 三维预览';
  $('aeAppearanceTools').hidden=false;
+ $('aeFitMode').value=info.config.fit_mode||'stretch';
  for(const input of document.querySelectorAll('[data-ae-appearance]')){
   if(document.activeElement!==input)input.value=info.config[input.dataset.aeAppearance]??(input.dataset.aeAppearance==='transparency'?0:1);
   showAppearanceValue(input);
@@ -189,7 +190,7 @@ function loadEffect(info){
  if($('aeDrag')){$('aeDrag').hidden=info.config.placement!=='plane';$('aeDrag').textContent='拖动变形：'+(deformEnabled?'开':'关');}
  for(const field of document.querySelectorAll('[data-ae-param]')){
   const key=field.dataset.aeParam;field.value=info.config[key]??(key.startsWith('crop_')?0:1);
-  field.disabled=info.config.placement==='plane'&&key==='uv_scale';showEffectValue(field);
+  field.disabled=(info.config.placement==='plane'&&key==='uv_scale')||(key==='tile_repeat'&&info.config.fit_mode!=='tile');showEffectValue(field);
  }
  if(info.awaiting_selection&&!snappingEffect){snappingEffect=true;$('aeSnap').textContent='请点击装甲表面…';}
  $('hint').textContent='左键旋转 · 右键平移 · 滚轮缩放 · 拖动发光面移动或拉角变形（Shift 沿法线）';
@@ -345,6 +346,19 @@ $('aePick').onclick=()=>{pickingEffect=!pickingEffect;placingEffect=false;snappi
 $('aeSnap').onclick=()=>{snappingEffect=!snappingEffect;placingEffect=false;pickingEffect=false;areaMode=false;$('aePick').textContent='点选承载面：关';$('box').textContent='框选车体：关';$('aeSnap').textContent=snappingEffect?'请点击装甲表面…':'吸附装甲';};
 function showEffectValue(field){field.nextElementSibling.textContent=Number(field.value).toFixed(field.dataset.aeParam.startsWith('crop_')?0:2)+(field.dataset.aeParam.startsWith('crop_')?'%':'×');}
 $('aeNewPlane').onclick=async()=>{placingEffect=false;pickingEffect=false;snappingEffect=false;areaMode=false;$('aeSnap').textContent='吸附装甲';$('aePick').textContent='点选承载面：关';$('box').textContent='框选车体：关';const response=await post('effectplane',{});if(!response.ok)$('message').textContent='未能创建平面，请返回编辑窗口重试。';};
+$('aeFitMode').onchange=async()=>{
+ try{
+  const response=await post('effectparams',{fit_mode:$('aeFitMode').value});
+  if(!response.ok)throw Error('rejected');
+  $('message').textContent='正在更新图案适配…';
+ }catch(error){$('aeFitMode').value=effectInfo.config.fit_mode||'stretch';$('message').textContent='图案适配未应用，请返回编辑窗口检查参数。';}
+};
+for(const [id,action] of [['aeCopySettings','copy'],['aePasteSettings','paste']])$(id).onclick=async()=>{
+ try{
+  const response=await post('effectsettings',{action});
+  $('message').textContent=response.ok?'已请求'+(action==='copy'?'复制':'粘贴')+'设置，请查看制作器提示。':'参数复刻请求未完成。';
+ }catch(error){$('message').textContent='参数复刻请求未完成，请返回编辑窗口重试。';}
+};
 $('aeResetWarp').onclick=async()=>{const values=Object.fromEntries(Object.keys(effectInfo.config).filter(k=>k.startsWith('warp_')).map(k=>[k,0]));await post('effectparams',values);};
 for(const field of document.querySelectorAll('[data-ae-param]')){
  field.oninput=()=>showEffectValue(field);

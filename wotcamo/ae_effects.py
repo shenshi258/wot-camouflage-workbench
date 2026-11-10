@@ -17,6 +17,8 @@ WARPS=tuple('warp_%s_%s'%(corner,axis) for corner in ('tl','tr','br','bl') for a
 DEFAULTS.update({key:0. for key in WARPS})
 DEFAULTS.update(tint_color='#FFFFFF',tint_strength=0.)
 DEFAULTS.update(contrast=1.,transparency=0.)
+DEFAULTS.update(fit_mode='stretch',tile_repeat=2.)
+FIT_MODES={'拉伸填充（旧版）':'stretch','等比完整（留空）':'contain','等比铺满（裁边）':'cover','等比重复平铺':'tile'}
 MAX_BRIGHTNESS=100.
 # A 8x8 grid bends around a pulled corner instead of only skewing two triangles.
 PLANE_SEGMENTS=8
@@ -25,7 +27,7 @@ PACKAGE_CONFLICT_NOTE='同一车型只启用一份涂装或 AE 特效包；更�
 
 def config(value):
     c=dict(DEFAULTS);c.update(value)
-    for k,lo,hi in [('contrast',0,3),('transparency',0,100),('tint_strength',0,100),('fps',1,60),('width',.01,20),('brightness',.01,MAX_BRIGHTNESS),('x',-30,30),('y',-30,30),('z',-30,30),('angle',-180,180),('lift',.001,.1),('uv_scale',.05,8),('uv_scale_x',.05,8),('uv_scale_y',.05,8),('u_offset',-2,2),('v_offset',-2,2)]+[(key,0,99) for key in ('crop_left','crop_right','crop_top','crop_bottom')]+[(key,-2.,2.) for key in WARPS]:
+    for k,lo,hi in [('tile_repeat',.25,16),('contrast',0,3),('transparency',0,100),('tint_strength',0,100),('fps',1,60),('width',.01,20),('brightness',.01,MAX_BRIGHTNESS),('x',-30,30),('y',-30,30),('z',-30,30),('angle',-180,180),('lift',.001,.1),('uv_scale',.05,8),('uv_scale_x',.05,8),('uv_scale_y',.05,8),('u_offset',-2,2),('v_offset',-2,2)]+[(key,0,99) for key in ('crop_left','crop_right','crop_top','crop_bottom')]+[(key,-2.,2.) for key in WARPS]:
         if isinstance(c[k],bool):raise ValueError('参数必须是数值：'+k)
         c[k]=float(c[k])
         if not math.isfinite(c[k]) or not lo<=c[k]<=hi:raise ValueError('参数超出范围：'+k)
@@ -33,6 +35,7 @@ def config(value):
     if c['plane'] not in ('auto','side','front','top'):raise ValueError('特效朝向无效。')
     if c['placement'] not in ('plane','surface','surface_glow'):raise ValueError('请选择独立平面、贴面播放或贴面发光。')
     if c['blend'] not in ('add','alpha'):raise ValueError('透明混合方式无效。')
+    if c['fit_mode'] not in FIT_MODES.values():raise ValueError('图案适配方式无效。')
     if type(c['mirror']) is not bool:raise ValueError('双侧设置无效。')
     if not isinstance(c['tint_color'],str) or not re.fullmatch(r'#[0-9a-fA-F]{6}',c['tint_color']):raise ValueError('颜色请填写 #RRGGBB，例如 #FF80C8。')
     c['tint_color']=c['tint_color'].upper()
@@ -40,11 +43,37 @@ def config(value):
     # A crossed/folded footprint cannot map the animation without reversing it.
     if c['placement']=='plane':
         left,right,top,bottom=c['crop_left']/100,1-c['crop_right']/100,c['crop_top']/100,1-c['crop_bottom']/100
+        if c['fit_mode']!='stretch':left,right,top,bottom=0.,1.,0.,1.
         points=np.array([[(u-.5)*2+c['warp_'+key+'_x'],(.5-v)*2+c['warp_'+key+'_y']] for key,u,v in (('tl',left,top),('tr',right,top),('br',right,bottom),('bl',left,bottom))])
         edges=np.roll(points,-1,axis=0)-points
         crosses=edges[:,0]*np.roll(edges,-1,axis=0)[:,1]-edges[:,1]*np.roll(edges,-1,axis=0)[:,0]
         if np.any(crosses>=-1e-6):raise ValueError('四角已交叉或折叠，请把角点拉回，保持四边形不交叉。')
     return {k:c[k] for k in DEFAULTS}
+
+
+def encode_settings(values):
+    """仅复制制作参数；不包含源包、素材、选区、客户端或任何文件路径。"""
+    return json.dumps(dict(kind='wot_ae_settings',schema=1,config=config(values)),ensure_ascii=False,indent=2)
+
+
+def decode_settings(text):
+    if not isinstance(text,str) or len(text.encode('utf-8'))>65536:raise ValueError('剪贴板不是有效的 AE 参数。')
+    try:data=json.loads(text)
+    except (ValueError,RecursionError):raise ValueError('请先使用“复制设置”，再粘贴 AE 参数。')
+    if not isinstance(data,dict) or set(data)!={'kind','schema','config'} or data['kind']!='wot_ae_settings' or type(data['schema']) is not int or data['schema']!=1:
+        raise ValueError('剪贴板不是支持的 AE 参数格式。')
+    if not isinstance(data['config'],dict) or not data['config'] or not set(data['config'])<=set(DEFAULTS):raise ValueError('AE 参数包含未知内容。')
+    return config(data['config'])
+
+
+def fitted_size(extent,aspect,c):
+    """按物理投影尺寸计算图案大小，不以归一化 UV 旋转矩形。"""
+    extent=np.asarray(extent,dtype=float)
+    if not math.isfinite(aspect) or aspect<=0:raise ValueError('素材长宽比无效。')
+    if c['fit_mode']=='tile':
+        width=extent[0]/c['tile_repeat'];return np.array([width,width/aspect])
+    factor=(min if c['fit_mode']=='contain' else max)(extent[0]/aspect,extent[1])
+    return np.array([factor*aspect,factor])
 
 
 def colorize_rgba(image,values):
@@ -206,7 +235,9 @@ def plane_weights(segments=PLANE_SEGMENTS):
 
 def plane_frames(clip,c):
     """Warped corner positions in geometry space, for direct on-screen dragging."""
-    c=config(c);corners,w,h=plane_corners(clip,c)
+    c=config(c)
+    if c['fit_mode']!='stretch':c=dict(c,crop_left=0.,crop_right=0.,crop_top=0.,crop_bottom=0.)
+    corners,w,h=plane_corners(clip,c)
     angle=math.radians(c['angle']);cs,sn=math.cos(angle),math.sin(angle)
     points=[]
     for key,(horizontal,vertical,_,_) in zip(('tl','tr','br','bl'),corners):
@@ -377,7 +408,30 @@ def _clip_polygon(poly,axis,bound,above):
         if (da>=0)!=(db>=0):result.append(a+(b-a)*(da/(da-db)))
     return result
 
-def surface_geometry(project,c,client):
+def clip_pattern_mesh(vertices,indices,c):
+    """将每个重复单元单独裁剪并折回 0～1，避免采到动画图集的邻帧。"""
+    output=[]
+    for triangle in np.asarray(indices).reshape(-1,3):
+        points=np.asarray(vertices)[triangle]
+        if c['fit_mode']=='tile':
+            low=np.floor(points[:,6:8].min(0)).astype(int);high=np.floor(points[:,6:8].max(0)).astype(int)
+            if np.prod(high-low+1)>1024:raise ValueError('平铺过密，请降低重复次数或调整图案大小。')
+            cells=((u,v) for u in range(low[0],high[0]+1) for v in range(low[1],high[1]+1))
+        else:cells=((0,0),)
+        for u,v in cells:
+            poly=list(points)
+            for axis,bound,above in [(6,u+c['crop_left']/100,True),(6,u+1-c['crop_right']/100,False),(7,v+c['crop_top']/100,True),(7,v+1-c['crop_bottom']/100,False)]:
+                if poly:poly=_clip_polygon(poly,axis,bound,above)
+            for i in range(1,len(poly)-1):
+                tri=np.array([poly[0],poly[i],poly[i+1]])
+                if np.linalg.norm(np.cross(tri[1,:3]-tri[0,:3],tri[2,:3]-tri[0,:3]))>1e-12:
+                    tri[:,6:8]-=[u,v];output.extend(tri)
+                    if len(output)>65535:raise ValueError('平铺后的网格过大，请降低重复次数或减少所选面。')
+    if not output:raise ValueError('素材已移出选中表面，请减小素材偏移或恢复缩放。')
+    return np.asarray(output),list(range(len(output)))
+
+
+def surface_geometry(project,c,client,clip=None):
     """Re-derive an overlay from authenticated original faces, preserving its native joint.
 
     We copy selected triangles, with an explicit opt-in for a mirrored overlay.
@@ -427,24 +481,20 @@ def surface_geometry(project,c,client):
     theta=math.radians(c['angle']);rotation=np.array([[math.cos(theta),-math.sin(theta)],[math.sin(theta),math.cos(theta)]])
     # UV V points down, unlike the plane's world-up axis. Invert the mapping
     # rotation so the same direction button turns both modes the same way.
-    uv=((uv-origin-[c['u_offset'],c['v_offset']])@rotation.T)/(c['uv_scale']*np.array([c['uv_scale_x'],c['uv_scale_y']]))+.5
+    centered=uv-origin-[c['u_offset'],c['v_offset']]
+    if c['fit_mode']=='stretch':
+        uv=(centered@rotation.T)/(c['uv_scale']*np.array([c['uv_scale_x'],c['uv_scale_y']]))+.5
+    else:
+        if not clip:raise ValueError('等比适配和平铺需要先导入素材。')
+        size=fitted_size(extent,clip['frame_size'][0]/clip['frame_size'][1],c)
+        uv=((centered*extent)@rotation.T)/(size*c['uv_scale']*np.array([c['uv_scale_x'],c['uv_scale_y']]))+.5
     vertices[:,6:8]=uv
     # 1 mm separates ordinary playback from the paint; glow has an explicit lift.
     distance=.001 if c['placement']=='surface' else c['lift']
     vertices[:,:3]+=vertices[:,3:6]*distance
-    output=[]
-    for triangle in indices:
-        poly=list(vertices[triangle])
-        # Crop in per-frame UV space before atlas remapping. This trims actual
-        # overlay triangles and cannot bleed into a neighbouring atlas frame.
-        for axis,bound,above in [(6,c['crop_left']/100,True),(6,1-c['crop_right']/100,False),(7,c['crop_top']/100,True),(7,1-c['crop_bottom']/100,False)]:
-            if poly:poly=_clip_polygon(poly,axis,bound,above)
-        for i in range(1,len(poly)-1):
-            tri=np.array([poly[0],poly[i],poly[i+1]])
-            if np.linalg.norm(np.cross(tri[1,:3]-tri[0,:3],tri[2,:3]-tri[0,:3]))>1e-12:output.extend(tri)
-    if not output:raise ValueError('素材已移出选中表面，请减小素材偏移或恢复缩放。')
-    vertices=np.asarray(output);vertices[:,3:6]/=np.maximum(np.linalg.norm(vertices[:,3:6],axis=1)[:,None],1e-12)
-    indices=list(range(len(vertices)));mirrored=0
+    vertices,indices=clip_pattern_mesh(vertices,indices,c)
+    vertices[:,3:6]/=np.maximum(np.linalg.norm(vertices[:,3:6],axis=1)[:,None],1e-12)
+    mirrored=0
     if c['mirror']:vertices,indices,mirrored=mirror_surface(vertices,indices,matrix)
     if len(vertices)>65535:raise ValueError('裁剪或双侧镜像后的网格过大，请减少所选面。')
     return dict(vertices=vertices,indices=indices,part=part,anchor=anchor,anchor_kind=kind,matrix=matrix,selected_triangles=count,mirrored_triangles=mirrored)
@@ -479,9 +529,19 @@ def mirror_surface(vertices,indices,matrix):
 
 def geometry_plan(project,clip,c,client):
     if c['placement']=='plane':
-        vertices,indices=plane_mesh(clip,c,[0,0,1,1])
-        return dict(vertices=vertices,indices=indices,part=c['part'],anchor='Gun' if c['part']=='gun' else c['part'],anchor_kind='node' if c['part']=='gun' else 'part',matrix=np.eye(4))
-    return surface_geometry(project,c,client)
+        base_c=c if c['fit_mode']=='stretch' else dict(c,crop_left=0.,crop_right=0.,crop_top=0.,crop_bottom=0.)
+        vertices,indices=plane_mesh(clip,base_c,[0,0,1,1]);extra={}
+        if c['fit_mode']!='stretch':
+            _,width,height=plane_corners(clip,base_c)
+            extent=np.array([width,height]);size=fitted_size(extent,clip['frame_size'][0]/clip['frame_size'][1],c)
+            # 保留裁剪前的平面坐标，三维拖动的双线性权重随新增顶点插值。
+            vertices=np.c_[vertices,np.asarray(plane_weights())]
+            vertices[:,6:8]=(vertices[:,6:8]-.5)*extent/size+.5
+            vertices,indices=clip_pattern_mesh(vertices,indices,c)
+            extra['weights']=vertices[:,8:12].tolist()
+            vertices=vertices[:,:8]
+        return dict(vertices=vertices,indices=indices,part=c['part'],anchor='Gun' if c['part']=='gun' else c['part'],anchor_kind='node' if c['part']=='gun' else 'part',matrix=np.eye(4),**extra)
+    return surface_geometry(project,c,client,clip)
 
 def atlas_vertices(vertices,rect):
     out=vertices.copy();out[:,6]=rect[0]+out[:,6]*(rect[2]-rect[0]);out[:,7]=rect[1]+out[:,7]*(rect[3]-rect[1]);return out
@@ -495,7 +555,7 @@ def preview_data(clip,c,project=None,client=None):
     corners,size=plane_frames(clip,c) if (plan is not None and c['placement']=='plane') else ([],[])
     original_count=len(vertices)-3*plan.get('mirrored_triangles',0) if plan else 0
     return dict(config=c,rects=clip['rects'],frames=clip['frames'],fps=c['fps'],period=clip['frames']/c['fps'],positions=positions(c) if plan else [],vertices=atlas_vertices(vertices,clip['rects'][0]).tolist(),local_uv=vertices[:,6:8].tolist(),indices=plan['indices'] if plan else [],part=plan['part'] if plan else c['part'],awaiting_selection=waiting,atlas_sha256=clip['atlas_sha256'],blendSrc=5,blendDst=2 if c['blend']=='add' else 6,original_vertex_count=original_count,
-                corners=corners,weights=plane_weights() if corners else [],base_size=size)
+                corners=corners,weights=plan.get('weights',plane_weights()) if corners else [],base_size=size)
 
 def save_project(path,project,clip,c):
     validate_clip(clip);c=config(c)

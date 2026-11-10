@@ -1,10 +1,10 @@
-# WOT 涂装工作台 3.4 R1 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.5 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
 ## English
 
-WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.4 includes 35 importable and exportable AE effect presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
+WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.5 adds AE settings copy/paste, aspect-preserving fitting and repeated patterns. It includes 35 importable and exportable AE presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
 
 ### Features
 
@@ -12,8 +12,17 @@ WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tank
 - **3D painting:** preview a stock vehicle or an existing single-vehicle camouflage, place images on a model surface, and adjust their position, size and angle.
 - **Model editing:** create a Blender project for a selected part and LOD, edit its mesh and export with read-back checks. Other LODs require separate work.
 - **Lighting:** open an existing camouflage or project in the light editor, select light surfaces, adjust colors and animation recipes, and preview the result.
-- **AE effects:** import transparent animations or use 35 presets; position effects, fit them to armor, crop, scale and configure mirrored sides.
+- **AE effects:** import transparent animations or use 35 presets; copy/paste parameters, preserve the image aspect ratio, repeat patterns, fit them to armor, crop, scale and configure mirrored sides.
 - **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
+
+### New in 3.5: copy settings and fit patterns
+
+Use **复制设置 / 粘贴设置** (Copy / Paste settings) in the AE editor to reuse position, size, brightness and other effect parameters. The destination vehicle, animation, selected faces and client stay selected. Check copied positions when changing vehicles.
+
+Open **长宽与贴合 → 图案适配** (Size and fitting → Pattern fit) to choose **contain** (keep the whole image with empty margins), **cover** (fill the area and crop edges), **tile** (repeat without stretching), or legacy stretch. Tiling has an adjustable horizontal repeat count of 0.25–16. The 3D preview offers the same controls under **缩放与裁剪** (Scale and crop), alongside copy/paste. Explicit independent axis scaling and corner deformation can still change proportions.
+
+Old projects and presets retain legacy stretch. New fitting and repeat settings persist in projects, presets and generated packages; use 3.5 to reopen them. All 35 bundled preset files are retained.
+
 ### 3.4 R1 UI review
 
 Slider palettes and disabled/focus states now follow both themes. Preview branding uses the current application version; decimal precision and help text are aligned. Key appearance-processing code has explanatory comments.
@@ -26,7 +35,7 @@ Settings are saved in editable projects and exported presets, and applied to gen
 
 ### Download and run
 
-Download the **3.4 portable ZIP** from [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases), extract it to a writable folder, and run `启动wot涂装工作台 3.4.cmd`. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
+Extract the supplied **3.5 local portable ZIP** to a writable folder and run `启动wot涂装工作台 3.5.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
 
 ### Earlier R1 changes
 
@@ -36,7 +45,7 @@ Download the **3.4 portable ZIP** from [Releases](https://github.com/shenshi258/
 
 ### Validation
 
-The existing release record reports background regression and isolated desktop UI checks. The original EU Pz70 camouflage was a **user-confirmed** working baseline. An offline generated sample was inspected, but complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). Check the actual game client and version before use, and verify loading, visibility and effects in game.
+Version 3.5 passed 98 backend checks and 38 isolated desktop UI checks, plus preview interaction scripts. The portable build repeats the backend and desktop suites with its included runtime. Export checks use synthetic fixtures to compare preview and exported geometry; they do not prove native shader rendering. Complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). The actual running client is unconfirmed. These editor features do not establish a fix for the separately reported in-game flicker.
 
 ### Acknowledgements
 
@@ -45,6 +54,14 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ---
 
 ## 中文版
+
+### 3.5 新增：参数复刻、等比适配与重复平铺
+
+- **复制 / 粘贴设置：** 复用位置、尺寸、亮度等 AE 制作参数，目标车辆、动画素材、承载面选区和客户端保持当前选择。换车型后请检查位置是否合适。
+- **保持原比例：** 在 **长宽与贴合 → 图案适配** 选择「等比完整（留空）」或「等比铺满（裁边）」，避免把图片强行拉伸到整个区域。
+- **重复平铺：** 选择「等比重复平铺」，横向重复次数可调 0.25～16，纵向按素材比例自动计算。三维预览展开 **缩放与裁剪**，也可调整适配、平铺并复制或粘贴设置。
+
+主动调整独立长宽比例或四角变形仍会改变图案比例。旧工程和旧预设继续使用原来的拉伸填充；新参数随工程、预设及新生成的涂装包保存，重新打开请使用 3.5。内置 35 款预设原文件保留。
 
 ### 3.4 R1 界面复核
 
@@ -62,10 +79,10 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 - **三维贴图：** 预览原版车型或同车已有涂装，在模型表面放置图片并调整位置、大小和角度。
 - **模型编辑：** 为选定部件和 LOD 创建 Blender 工程，编辑网格并导出回读检查；其他 LOD 需分别处理。
 - **灯效制作：** 导入已有涂装或工程，选择灯面，调整颜色和动画配方并预览。
-- **AE 特效：** 导入透明动画或使用 35 款预设，调整位置、贴合装甲、裁剪、长宽及左右双侧。
+- **AE 特效：** 导入透明动画或使用 35 款预设，复制/粘贴参数，按原比例适配或重复平铺，调整位置、贴合装甲、裁剪、长宽及左右双侧。
 - **校验与安装：** 查看产物报告和哈希，向所选客户端安装并备份，按安装记录回滚。文件校验不能代替游戏内测试。
 
-便携版请从 Releases 下载，解压到可写目录后运行「启动wot涂装工作台 3.4.cmd」。本仓库为 3.4 源码与预设；源码不包含便携版运行环境。内置全部 35 款可导入、导出的 AE 特效预设，并附有「预设预览」：32 秒动态总览、离线搜索页面与逐款动画。
+3.5 本地便携包解压到可写目录后运行「启动wot涂装工作台 3.5.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.5 源码与预设；源码不包含便携版运行环境。内置全部 35 款可导入、导出的 AE 特效预设，并附有「预设预览」：32 秒动态总览、离线搜索页面与逐款动画。
 
 ## 可选液态玻璃界面
 
@@ -93,9 +110,9 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 
 ## 验证范围
 
-完成 84 项无窗口后台回归、32 项隔离桌面真实界面检查、双侧拖动脚本检查、全部 35 款预设与动态预览检查。包内自带运行环境另执行 39 项后台检查与同一套 32 项界面检查；后两组属于复核，不计为新增测试。界面测试在独立桌面运行，不切换当前桌面，不操作游戏。
+3.5 完成 98 项后台回归、38 项隔离桌面真实界面检查，以及三维预览交互脚本检查。最终便携包使用自带运行环境复核相同后台和界面测试；复核不计为新增测试。界面检查在独立桌面运行，不切换当前桌面，不操作游戏。导出测试使用合成夹具，比较预览与导出网格、参数和原始资源，不能证明原生着色器或游戏整车加载成功。
 
-此前以用户确认可正常使用的欧服 Pz70 原涂装为基线，离线生成玻璃双侧样例并回读 96 帧、192 个材质及两侧网格；原始资源逐字节保留。原包存在一处既有炮塔网格分组警告，该项未改动。3.3 时的欧服客户端资源检查为 2.4.1.1 #989。离线样例的整车状态为 not_tested；此次 R1 仅修订工作台界面，未重新生成该样例或启动、安装游戏。实际整车加载、玻璃效果、遮挡和远近显示需游戏内验证。你的实际客户端更新后需重新核对。
+此前欧服 Pz70 原涂装属于用户确认可用的基线，并非代理亲自游戏实测。本次实际运行客户端尚未确认，未安装或启动游戏；整车加载、实际光效、遮挡和远近显示状态均为 not_tested。此次制作器功能更新不代表此前反馈的游戏内闪烁已经解决。实际客户端或最终生成包改变后，需重新核对并游戏内验证。
 
 
 ## 致谢

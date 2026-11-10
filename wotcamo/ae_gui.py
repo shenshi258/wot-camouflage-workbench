@@ -36,7 +36,8 @@ class AEImporter(tk.Tk):
         self.columns=tk.StringVar(value='4');self.rows=tk.StringVar(value='4');self.count=tk.StringVar(value='16')
         self.note=tk.StringVar(value='选择涂装包，再导入 AE 导出的透明 PNG 素材。')
         self.clip_note=tk.StringVar(value='尚未导入素材');self.client_note=tk.StringVar()
-        self.values={k:tk.StringVar(value=str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','mirror','blend','placement')}
+        self.values={k:tk.StringVar(value=str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','mirror','blend','placement','fit_mode')}
+        self.fit_mode=tk.StringVar(value=next(k for k,v in ae.FIT_MODES.items() if v=='stretch'))
         self.part=tk.StringVar(value='车体');self.plane=tk.StringVar(value='侧面');self.blend=tk.StringVar(value='发光叠加');self.mirror=tk.BooleanVar(value=False)
         self.placement=tk.StringVar(value='独立平面');self.mode_note=tk.StringVar()
         self.selection_note=tk.StringVar(value='尚未选择承载面')
@@ -49,9 +50,11 @@ class AEImporter(tk.Tk):
         self.interface()
         self.attach_explanations(self)
         self.refresh_presets()
-        for var in list(self.values.values())+[self.part,self.plane,self.blend,self.mirror]:var.trace_add('write',self.changed)
+        for var in list(self.values.values())+[self.part,self.plane,self.blend,self.mirror,self.fit_mode]:var.trace_add('write',self.changed)
         self.placement.trace_add('write',self.mode_changed)
+        self.fit_mode.trace_add('write',self.fit_changed)
         self.mode_changed()
+        self.fit_changed()
         self.poll_id=self.after(150,self.poll);self.protocol('WM_DELETE_WINDOW',self.close)
         if client:self.check_client()
 
@@ -125,6 +128,10 @@ class AEImporter(tk.Tk):
             if widget.startswith(str(right)) and not widget.startswith(str(self.param_tabs)):
                 right_canvas.yview_scroll(int(-event.delta/120),'units')
         self.bind('<MouseWheel>',scroll_right,add='+')
+        settings_row=ttk.Frame(right);settings_row.pack(fill='x',pady=(0,8))
+        self.button(settings_row,'复制设置',self.copy_settings).pack(side='left')
+        self.button(settings_row,'粘贴设置',self.paste_settings).pack(side='left',padx=8)
+        ttk.Label(settings_row,text='仅复制参数，保留当前车辆与素材',style='Muted.TLabel').pack(side='left')
         mode=ttk.LabelFrame(right,text='2  选择呈现方式',padding=12);mode.pack(fill='x')
         ttk.Combobox(mode,textvariable=self.placement,values=list(PLACEMENTS),state='readonly',width=20).pack(anchor='w')
         ttk.Checkbutton(mode,text='左右双侧显示（镜像到另一侧）',variable=self.mirror).pack(anchor='w',pady=(7,0))
@@ -148,6 +155,9 @@ class AEImporter(tk.Tk):
             row=ttk.Frame(parent);row.pack(fill='x',pady=5);ttk.Label(row,text=label,width=16).pack(side='left');w=ttk.Combobox(row,textvariable=var,values=list(options),state='readonly',width=21);w.pack(side='left');return w
         def field(parent,label,key):
             row=ttk.Frame(parent);row.pack(fill='x',pady=4);ttk.Label(row,text=label,width=16).pack(side='left');w=ttk.Entry(row,textvariable=self.values[key],width=13);w.pack(side='left');self.fields[key]=w;return w
+        choice(fitting,'图案适配',self.fit_mode,ae.FIT_MODES)
+        field(fitting,'平铺横向次数','tile_repeat')
+        ttk.Label(fitting,text='等比完整会留空，等比铺满会裁边；平铺按原图比例重复，纵向自动补齐。手动长宽倍率和四角变形仍会改变形状。',wraplength=550,style='Muted.TLabel').pack(anchor='w',pady=6)
         choice(fitting,'映射方向',self.plane,PLANES);field(fitting,'精确方向（度）','angle')
         # Independent axes are shared by every placement mode; only fitting
         # offsets and surface-only controls follow the selected surface mode.
@@ -195,6 +205,10 @@ class AEImporter(tk.Tk):
         for w in self.surface_widgets:w.state(['!disabled'] if surface else ['disabled'])
         self.fields['lift'].state(['!disabled'] if glow else ['disabled'])
         self.update_selection_note();self.param_tabs.select(0);self.changed()
+
+    def fit_changed(self,*args):
+        enabled=ae.FIT_MODES[self.fit_mode.get()]=='tile' and not self.busy
+        self.fields['tile_repeat'].state(['!disabled'] if enabled else ['disabled'])
 
     def update_selection_note(self):
         selection=(self.project or {}).get('ae_selection')
@@ -255,7 +269,8 @@ class AEImporter(tk.Tk):
     def reset_fitting(self):
         for key in ('uv_scale','uv_scale_x','uv_scale_y','u_offset','v_offset','crop_left','crop_right','crop_top','crop_bottom'):
             self.values[key].set(str(ae.DEFAULTS[key]))
-        self.note.set('缩放、偏移和裁剪已重置；当前吸附点与装甲选区保留。')
+        self.values['tile_repeat'].set(str(ae.DEFAULTS['tile_repeat']))
+        self.note.set('缩放、偏移、裁剪和平铺次数已重置；适配方式、吸附点与装甲选区保留。')
 
     def update_packaging(self):
         self.export_button.configure(text='生成涂装包')
@@ -288,6 +303,7 @@ class AEImporter(tk.Tk):
             if key in self.values:self.values[key].set(str(values[key]))
         self.plane.set(next(k for k,v in PLANES.items() if v==values['plane']))
         self.blend.set(next(k for k,v in BLENDS.items() if v==values['blend']))
+        self.fit_mode.set(next(k for k,v in ae.FIT_MODES.items() if v==values['fit_mode']))
         self.note.set('已套用 AE 预设“'+data['name']+'”。当前涂装、位置和选区已保留；可继续微调并预览。')
         self.changed()
 
@@ -398,7 +414,7 @@ class AEImporter(tk.Tk):
         remove its units/help. Combobox choices use the same help as the field.
         """
         variables={str(value):key for key,value in self.values.items()}
-        for name,key in [('source','source'),('client','client'),('baseline','baseline'),('part','part'),('plane','plane'),('placement','placement'),('blend','blend'),('mirror','mirror'),('preset_name','preset'),('premult','premult'),('columns','columns'),('rows','rows'),('count','count'),('auto_bundle','auto_bundle'),('include_project','include_project'),('output_folder','output_folder'),('title_value','title_value')]:variables[str(getattr(self,name))]=key
+        for name,key in [('source','source'),('client','client'),('baseline','baseline'),('part','part'),('plane','plane'),('placement','placement'),('blend','blend'),('fit_mode','fit_mode'),('mirror','mirror'),('preset_name','preset'),('premult','premult'),('columns','columns'),('rows','rows'),('count','count'),('auto_bundle','auto_bundle'),('include_project','include_project'),('output_folder','output_folder'),('title_value','title_value')]:variables[str(getattr(self,name))]=key
         def walk(widget):
             for child in widget.winfo_children():
                 keys=child.keys();variable=child.cget('textvariable') if 'textvariable' in keys else child.cget('variable') if 'variable' in keys else ''
@@ -433,7 +449,29 @@ class AEImporter(tk.Tk):
         threading.Thread(target=run,daemon=True).start()
 
     def collect(self):
-        return ae.config(dict({k:v.get() for k,v in self.values.items()},part=PARTS[self.part.get()],plane=PLANES[self.plane.get()],blend=BLENDS[self.blend.get()],mirror=self.mirror.get(),placement=PLACEMENTS[self.placement.get()]))
+        return ae.config(dict({k:v.get() for k,v in self.values.items()},part=PARTS[self.part.get()],plane=PLANES[self.plane.get()],blend=BLENDS[self.blend.get()],fit_mode=ae.FIT_MODES[self.fit_mode.get()],mirror=self.mirror.get(),placement=PLACEMENTS[self.placement.get()]))
+
+    def copy_settings(self):
+        if self.busy:return
+        try:
+            text=ae.encode_settings(self.collect());self.clipboard_clear();self.clipboard_append(text)
+        except (ValueError,tk.TclError) as error:return messagebox.showerror('无法复制设置',str(error),parent=self)
+        self.note.set('已复制 AE 参数。更换素材或打开另一工程后，可用“粘贴设置”复刻。')
+
+    def restore_settings(self,values):
+        # 先完整验证，成功后再填写控件；呈现方式会触发默认值，因此先设再恢复其他参数。
+        c=ae.config(values)
+        self.placement.set(next(k for k,v in PLACEMENTS.items() if v==c['placement']))
+        for key,var in self.values.items():var.set(str(c[key]))
+        for var,mapping,key in [(self.part,PARTS,'part'),(self.plane,PLANES,'plane'),(self.blend,BLENDS,'blend'),(self.fit_mode,ae.FIT_MODES,'fit_mode')]:var.set(next(k for k,v in mapping.items() if v==c[key]))
+        self.mirror.set(c['mirror']);self.changed()
+
+    def paste_settings(self):
+        if self.busy:return
+        try:c=ae.decode_settings(self.clipboard_get())
+        except (ValueError,tk.TclError) as error:return messagebox.showerror('无法粘贴设置',str(error),parent=self)
+        self.restore_settings(c)
+        self.note.set('已粘贴 AE 参数；当前车辆、素材、承载面和客户端保留。位置数值会复用，跨车型请重新核对。')
 
     def require(self):
         if not self.clip:raise ValueError('请先导入 PNG 序列帧或图集。')
@@ -544,11 +582,8 @@ class AEImporter(tk.Tk):
         def loaded(result):
             if self.session:self.session.close();self.session=None
             project,clip,c=result;self.project=project;self.loaded_source=str(Path(project['source']).resolve());self.source.set(project['source']);self.baseline.set(project.get('baseline_user_confirmed',False));self.imported(clip)
-            self.placement.set(next(k for k,v in PLACEMENTS.items() if v==c['placement']))
             self.update_selection_note()
-            for k,v in self.values.items():v.set(str(c[k]))
-            for var,mapping,key in [(self.part,PARTS,'part'),(self.plane,PLANES,'plane'),(self.blend,BLENDS,'blend')]:var.set(next(n for n,v in mapping.items() if v==c[key]))
-            self.mirror.set(c['mirror']);self.note.set('工程已恢复，可直接预览或继续调整。')
+            self.restore_settings(c);self.note.set('工程已恢复，可直接预览或继续调整。')
         folder=self.work/('reopened_'+datetime.now().strftime('%H%M%S%f'));self.job(lambda:ae.load_project(path,folder),loaded)
 
     def export(self):
@@ -616,9 +651,12 @@ class AEImporter(tk.Tk):
                         if event.get('snap') and self.placement.get()=='独立平面':self.placement.set('贴面发光' if self.blend.get()=='发光叠加' else '贴面播放')
                         self.changed()
                     elif event['type']=='effectplane':self.new_plane()
+                    elif event['type']=='effectsettings':
+                        (self.copy_settings if event['action']=='copy' else self.paste_settings)()
                     elif event['type']=='effectparams':
                         for key,value in event['values'].items():
                             if key=='mirror':self.mirror.set(value)
+                            elif key=='fit_mode':self.fit_mode.set(next(k for k,v in ae.FIT_MODES.items() if v==value))
                             else:self.values[key].set(str(value))
                         self.changed()
                     elif event['type']=='effectplace':

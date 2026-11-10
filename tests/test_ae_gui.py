@@ -12,6 +12,34 @@ class AEGUITests(unittest.TestCase):
         self.app.values['angle'].set('37');self.assertEqual(self.app.collect()['angle'],37)
         self.assertFalse(hasattr(self.app,'direction_buttons'))
 
+    def test_copy_paste_settings_keeps_current_assets_and_rejects_invalid_clipboard(self):
+        from unittest.mock import patch
+        app=self.app;clipboard={}
+        app.source.set('current-source.wotmod');project={'ae_selection':{'groups':[]}};clip=object()
+        app.project=project;app.clip=clip
+        app.fit_mode.set('等比重复平铺');app.values['tile_repeat'].set('3');app.values['x'].set('2');app.values['brightness'].set('7.5')
+        expected=app.collect()
+        with patch.object(app,'clipboard_clear'),patch.object(app,'clipboard_append',side_effect=lambda text:clipboard.update(text=text)),patch.object(app,'clipboard_get',side_effect=lambda:clipboard['text']):
+            app.copy_settings();app.fit_mode.set('拉伸填充（旧版）');app.values['x'].set('-3');app.paste_settings()
+            self.assertEqual(app.collect(),expected)
+            clipboard['text']='not settings'
+            with patch('wotcamo.ae_gui.messagebox.showerror') as error:app.paste_settings();error.assert_called_once()
+            self.assertEqual(app.collect(),expected)
+        self.assertIs(app.project,project);self.assertIs(app.clip,clip);self.assertEqual(app.source.get(),'current-source.wotmod')
+
+    def test_tile_option_control_and_copy_buttons_have_help_and_busy_states(self):
+        from tkinter import ttk
+        from wotcamo import ui_theme
+        app=self.app
+        self.assertTrue(app.fields['tile_repeat'].instate(['disabled']))
+        app.fit_mode.set('等比重复平铺');self.assertTrue(app.fields['tile_repeat'].instate(['!disabled']))
+        controls=[b for b in app.buttons if b.cget('text') in ('复制设置','粘贴设置')]
+        self.assertEqual(len(controls),2)
+        for control in controls+[app.fields['tile_repeat']]:self.assertIn(control,app.hover_help.providers)
+        snapshot=ui_theme.lock_controls(app)
+        self.assertTrue(all(w.instate(['disabled']) for w in controls))
+        ui_theme.unlock_controls(snapshot);self.assertTrue(all(w.instate(['!disabled']) for w in controls))
+
     def test_appearance_sliders_save_values_and_reset_independently_of_placement(self):
         for key,value in [('brightness',100),('contrast',2),('transparency',65)]:
             self.app.adjustment_sliders[key].set(value)
