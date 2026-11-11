@@ -25,6 +25,26 @@ async function start(){
 }
 async function evaluate(expression){if(expression.includes('await '))expression='(async()=>{'+expression+'})()';const result=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(result.exceptionDetails)throw Error(result.exceptionDetails.text+' '+JSON.stringify(result.exceptionDetails.exception));return result.result.value;}
 async function screenshot(name){const result=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(root,'.cache',name),Buffer.from(result.data,'base64'));}
+async function reviewLibrary(){
+ await evaluate(`
+  const library=window.assetLibrary,originalUse=library.onUse,originalFetch=window.fetch;
+  const first=library.items[0],second=library.items[1],used=[];let release;
+  library.onUse=async(blob,item)=>{used.push(item.id);return true;};
+  window.fetch=(url,options)=>String(url).endsWith('/library/image/'+first.id)?new Promise(resolve=>{release=()=>originalFetch(url,options).then(resolve);}):originalFetch(url,options);
+  try{library.select(first);const earlier=library.use();library.select(second);await library.use();await release();await earlier;window.qaUsed=used;window.qaExpected=second.id;}
+  finally{library.onUse=originalUse;window.fetch=originalFetch;}
+ `);
+ assert.deepStrictEqual(await evaluate('window.qaUsed'),[await evaluate('window.qaExpected')]);
+ await evaluate(`window.qaOriginal={name:assetLibrary.selected.name,category:assetLibrary.selected.category};assetLibrary.el('name').value='长名称'.repeat(30);assetLibrary.el('editCategory').value='长分类'.repeat(13);await assetLibrary.edit();`);
+ for(const size of [[800,600],[1084,700]])for(const glass of [false,true]){
+  await send('Emulation.setDeviceMetricsOverride',{width:size[0],height:size[1],deviceScaleFactor:1,mobile:false});
+  const result=await evaluate(`(()=>{document.body.classList.toggle('glass-ui',${glass});const library=assetLibrary;return {colour:getComputedStyle(library.el('import')).backgroundColor,nameHeight:library.el('chosenName').getBoundingClientRect().height,wide:document.documentElement.scrollWidth>innerWidth+1,help:library.el('remove').title};})()`);
+  assert.strictEqual(result.colour,'rgb(0, 122, 255)');assert(result.nameHeight<=40);assert(!result.wide);assert(result.help.includes('回收站'));
+  if(size[0]===800)await screenshot('素材库_UI复核_'+(glass?'玻璃':'经典')+'_800x600.png');
+ }
+ await evaluate(`assetLibrary.el('name').value=qaOriginal.name;assetLibrary.el('editCategory').value=qaOriginal.category;await assetLibrary.edit();document.body.classList.remove('glass-ui');`);
+ await send('Emulation.setDeviceMetricsOverride',{width:1084,height:700,deviceScaleFactor:1,mobile:false});
+}
 (async()=>{
  try{
   await start();await send('Page.navigate',{url:info.library_url});await until(()=>evaluate('!!window.assetLibrary'));
@@ -43,6 +63,7 @@ async function screenshot(name){const result=await send('Page.captureScreenshot'
   await screenshot('图片素材库_缩略图验证.png');
   const selected=await evaluate('assetLibrary.selected.id');
   await send('Page.reload');await until(()=>evaluate('!!window.assetLibrary&&assetLibrary.items.length===8'));
+  if(process.argv.includes('--review'))await reviewLibrary();
   await send('Page.navigate',{url:info.paint_url});
   await until(()=>evaluate('!!window.previewTest&&window.previewTest.report().ready'),45000);
   await evaluate("document.getElementById('paintLibrary').click()");await until(()=>evaluate("document.querySelectorAll('#libraryPanel [data-asset-id]').length===8"));
@@ -61,6 +82,7 @@ async function screenshot(name){const result=await send('Page.captureScreenshot'
   assert.strictEqual(result.paint.saved,1);assert.deepStrictEqual(result.errors,[]);
   fs.writeFileSync(path.join(root,'.cache/library38_browser_result.json'),JSON.stringify({scope:'Synthetic media and model only; no actual game execution.',whole_vehicle_loading:{status:'not_tested'},imported:8,duplicate:1,rejected:1,persisted:true,edited:true,recycleUndo:true,selectedAndExported:true,result},null,2));
   console.log('ASSET_LIBRARY_BROWSER_IMPORT_SEARCH_PERSIST_AND_PAINT_EXPORT_OK');
+  if(process.argv.includes('--review'))console.log('UI_LIBRARY_THEMES_COMPACT_LAYOUT_AND_LAST_SELECTION_OK');
  }finally{
   if(info)fs.writeFileSync(info.stop,'');
   if(send){await send('Page.navigate',{url:'about:blank'}).catch(()=>{});await send('Browser.close').catch(()=>{});}

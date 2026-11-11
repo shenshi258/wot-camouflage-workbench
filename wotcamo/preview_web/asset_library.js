@@ -3,7 +3,7 @@
 export class AssetLibrary{
  constructor(root,{base=new URL('./',location.href),onUse=null,onClose=null,isBusy=()=>false}={}){
   this.root=root;this.base=base;this.onUse=onUse;this.onClose=onClose;this.isBusy=isBusy;
-  this.items=[];this.selected=null;this.busy=false;this.removed=null;this.revision=0;
+  this.items=[];this.selected=null;this.busy=false;this.removed=null;this.revision=0;this.useRevision=0;
   root.classList.add('asset-library');
   root.innerHTML=`<div class="asset-toolbar"><div class="asset-heading"><strong>图片素材库</strong><button data-lib="close" type="button" aria-label="关闭素材库">关闭</button></div>
    <div class="asset-actions"><button data-lib="import" class="asset-primary" type="button">导入图片…</button><button data-lib="folder" type="button">导入文件夹…</button><button data-lib="refresh" type="button">刷新</button></div>
@@ -25,6 +25,8 @@ export class AssetLibrary{
   for(const key of ['search','category'])this.el(key).addEventListener(key==='search'?'input':'change',()=>this.renderGrid());
   this.el('use').onclick=()=>this.use();this.el('save').onclick=()=>this.edit();this.el('remove').onclick=()=>this.remove();this.el('undo').onclick=()=>this.restore();
   this.el('previewClose').onclick=()=>this.el('preview').close();
+  const help={import:'多选 PNG / JPG / WebP，每批最多 128 张；保存副本，原图保留。',folder:'导入文件夹及子文件夹内的图片，每批最多 128 张。',refresh:'读取其他窗口新增或修改的素材。',importCategory:'新素材使用此分类；重复文件保留库内已有分类。',search:'按名称或分类筛选，不修改已放置到车身的图案。',category:'只筛选显示；修改分类请展开下方编辑区域。',name:'显示名称，最多 100 个字符；不改原始文件名。',editCategory:'分类最多 40 个字符，留空为未分类。',save:'保存名称和分类，不改图片内容。',remove:'移到图库回收站，保留原图和已经放置的图案。',undo:'撤销本窗口最近一次移出；回收副本仍保留在库目录。',use:onUse?'载入为当前贴图；保存当前贴图后可以继续添加。':'放大查看素材及透明边缘。',previewClose:'关闭大图预览，返回素材库。'};
+  for(const [key,text] of Object.entries(help))this.el(key).title=text;
  }
  el(name){return this.root.querySelector(`[data-lib="${name}"]`);}
  url(path){return new URL(path,this.base).href;}
@@ -61,12 +63,15 @@ export class AssetLibrary{
   for(const button of this.el('grid').querySelectorAll('[data-asset-id]'))button.setAttribute('aria-pressed',String(button.dataset.assetId===item?.id));
   if(item){
    this.el('chosenImage').src=this.url('library/thumb/'+item.id);this.el('chosenName').textContent=item.name;
+   this.el('chosenName').title=item.name;
    this.el('chosenSize').textContent=`${item.width}×${item.height} · ${item.category}`;
+   this.el('chosenSize').title=this.el('chosenSize').textContent;
    this.el('name').value=item.name;this.el('editCategory').value=item.category;
   }
   this.updateButtons();
  }
  updateButtons(){
+  this.root.setAttribute('aria-busy',String(this.busy));
   for(const key of ['import','folder','refresh','files','directory','importCategory','name','editCategory','save','remove','undo'])this.el(key).disabled=this.busy;
   this.el('use').disabled=this.busy||!this.selected||this.isBusy();this.el('undo').hidden=!this.removed;
   for(const button of this.el('grid').querySelectorAll('button'))button.disabled=this.busy;
@@ -94,12 +99,15 @@ export class AssetLibrary{
  async use(){
   const item=this.selected;if(!item||this.busy)return;
   if(this.isBusy()){this.message('正在生成涂装，请完成后再使用素材。');return;}
+  // 资源读取有先后差异；只让最后一次“使用素材”的响应进入贴图流程。
+  const revision=++this.useRevision;
   try{
    if(this.onUse){
-    const response=await fetch(this.url('library/image/'+item.id));if(!response.ok)throw Error('图片读取失败，请重新导入。');
-    const used=await this.onUse(await response.blob(),item);if(used!==false)this.message('已载入“'+item.name+'”，点击模型放置；保存当前贴图后可继续添加。');
+    const response=await fetch(this.url('library/image/'+item.id));if(!response.ok)throw Error('图片读取失败，可先移出该项后重新导入。');
+    const blob=await response.blob();if(revision!==this.useRevision)return;
+    const used=await this.onUse(blob,item);if(used!==false&&revision===this.useRevision)this.message('已载入“'+item.name+'”，点击模型放置；保存当前贴图后可继续添加。');
    }else{this.el('largeImage').src=this.url('library/image/'+item.id);this.el('largeImage').alt=item.name;this.el('preview').showModal();}
-  }catch(error){this.error(error);}
+  }catch(error){if(revision===this.useRevision)this.error(error);}
  }
  async edit(){
   if(!this.selected||this.busy)return;this.busy=true;this.updateButtons();

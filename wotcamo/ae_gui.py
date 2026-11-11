@@ -511,7 +511,10 @@ class AEImporter(tk.Tk):
             if self.session:self.session.close();self.session=None
 
     def imported(self,clip):
-        self.clip=clip;w,h=clip['frame_size'];self.clip_note.set('%d 帧 · 原始 %d×%d · 图集 %d×%d · 已保留透明通道'%(clip['frames'],w,h,*clip['size']));self.note.set('素材已导入。可打开三维预览，或调整宽度、位置和帧率。');self.changed()
+        self.clip=clip;info=clip.get('import_info',{});w,h=info.get('source_size',clip['frame_size'])
+        background='黑底已转透明' if info.get('alpha_mode')=='black' else '保留画面' if info.get('alpha_mode')=='preserve' else '已保留透明通道'
+        self.clip_note.set('%d 帧 · 原始 %d×%d · 图集 %d×%d · %s'%(clip['frames'],w,h,*clip['size'],background))
+        self.note.set('素材已导入。可打开三维预览，或调整宽度、位置和帧率。');self.changed()
 
     def choose_media(self):
         if self.busy:return

@@ -67,6 +67,7 @@ class Library:
                     kind=image.format
                     if kind not in FORMATS or image.width*image.height>MAX_PIXELS:raise ValueError('请选择不超过 2500 万像素的 PNG、JPG 或 WebP 图片。')
                     if getattr(image,'n_frames',1)>1:raise ValueError('图片素材库只收静态图案；动画请使用 AE 的 GIF / 视频导入。')
+                    # 只为缩略图校正方向；原文件副本按字节保留，供贴图导出复用。
                     preview=ImageOps.exif_transpose(image).convert('RGBA')
             except (OSError,UnidentifiedImageError,Image.DecompressionBombError) as error:raise ValueError('图片无法读取。') from error
             width,height=preview.size;preview.thumbnail((160,160),Image.Resampling.LANCZOS)
@@ -74,6 +75,7 @@ class Library:
             record=dict(schema=1,id=key,name=title,category=category,width=width,height=height,bytes=len(raw),format=kind,
                         source_name=source_name[:255],created=datetime.now(timezone.utc).isoformat(),thumb_sha256=hashlib.sha256(thumb).hexdigest())
             self.root.mkdir(parents=True,exist_ok=True)
+            # 三件文件齐全后才把临时目录提交为素材，列表不会看见半份导入。
             with tempfile.TemporaryDirectory(prefix='.import_',dir=self.root) as temporary:
                 scratch=Path(temporary)
                 (scratch/FORMATS[kind][0]).write_bytes(raw);(scratch/'thumb.png').write_bytes(thumb)
@@ -97,7 +99,7 @@ class Library:
             path=folder/name
             if not path.resolve().is_relative_to(folder.resolve()) or path.stat().st_size>(512*1024 if thumbnail else MAX_BYTES):raise ValueError('素材文件无效。')
             raw=path.read_bytes();expected=record['thumb_sha256'] if thumbnail else key
-            if hashlib.sha256(raw).hexdigest()!=expected:raise ValueError('素材文件已变化，请重新导入。')
+            if hashlib.sha256(raw).hexdigest()!=expected:raise ValueError('素材副本已变化，请移出该项后重新导入。')
             return raw,'image/png' if thumbnail else FORMATS[record['format']][1]
 
     def edit(self,key,name,category):
@@ -107,6 +109,7 @@ class Library:
             return row
 
     def remove(self,key):
+        """移动副本到库内回收站；不触及外部原图或已经烘焙的贴图。"""
         with _lock:
             self.record(key)
             stamp=datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')

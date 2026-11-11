@@ -66,7 +66,7 @@ class Session:
                         match=re.fullmatch(r'library/(image|thumb)/([a-f0-9]{64})',route)
                         if not match:return self.send(404,b'Not found')
                         try:raw,kind=outer.library.image(match[2],thumbnail=match[1]=='thumb')
-                        except (OSError,ValueError,KeyError):return self.send(404,dict(error='素材读取失败，请刷新或重新导入。'))
+                        except (OSError,ValueError,KeyError):return self.send(404,dict(error='素材读取失败，可先移出该项后重新导入。'))
                         return self.send(200,raw,kind)
                     if route=='effect/atlas.png' and outer.effect:
                         version=parse_qs(urlsplit(self.path).query).get('v',[''])[0]

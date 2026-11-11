@@ -1,4 +1,4 @@
-# WOT 涂装工作台 3.8 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.8 R1 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
@@ -16,6 +16,8 @@ WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tank
 - **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
 
 ### New in 3.8: import your own thumbnail library
+
+R1 aligns primary buttons across themes, bounds long labels, adds missing hover help, and keeps compact preview actions visible. When selecting multiple assets quickly, late responses no longer replace the most recent selection. The current revision passes 131 backend and 46 desktop UI checks, with browser theme/layout and interaction verification.
 
 Open **涂装制作 → 管理图片素材库** to batch-import PNG, JPG or WebP files/folders, search by name/category, and edit labels. The library works without selecting a client or vehicle. In the 3D painting window, open **图片素材库**, select a thumbnail and choose **使用素材**, then click the model to place it.
 
@@ -72,6 +74,8 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ## 中文版
 
 ### 3.8 新增：自己的图片也能导入缩略图素材库
+
+R1 统一主题下的主按钮，限制长名称占用，补齐悬停帮助并保留小窗口操作栏；连续使用素材时，迟到请求不再覆盖最新选择。当前修订通过 131 项后台、46 项桌面界面检查，并复核浏览器主题、布局与交互。
 
 打开 **涂装制作 → 管理图片素材库**，可多选图片或按文件夹导入 PNG、JPG、WebP，自动生成缩略图，支持搜索、分类、改名及移出撤销。无需先选车型或客户端。三维贴图中点击 **图片素材库**，选中缩略图后按 **使用素材**，再点模型放置；保存当前贴图后可继续添加。
 

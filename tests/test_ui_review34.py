@@ -10,6 +10,31 @@ from wotcamo.gui import Workbench
 
 
 class UIReview34Tests(unittest.TestCase):
+    def test_new_preview_actions_have_help_and_remain_inside_compact_window(self):
+        from PIL import Image
+        from wotcamo.ae_media_gui import ClipPreview
+        app=AEImporter()
+        try:
+            clip=ae.pack_frames([Image.new('RGBA',(32,16),(255,0,0,128))],app.work/'help.png')
+            viewer=ClipPreview(app,clip,dict(fps=24));viewer.geometry('480x340');app.update()
+            buttons=[w for frame in viewer.winfo_children() for row in frame.winfo_children() for w in row.winfo_children() if isinstance(w,ttk.Button)]
+            self.assertEqual(len(buttons),3)
+            for button in buttons:
+                self.assertIn(button,viewer.hover_help.providers)
+                self.assertNotIn('media_',viewer.hover_help.providers[button](SimpleNamespace(x=1,y=1)).title)
+                self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),viewer.winfo_rooty()+viewer.winfo_height())
+            viewer.destroy()
+        finally:app.close()
+
+    def test_library_entry_and_reset_help_match_the_current_controls(self):
+        app=Workbench()
+        try:
+            button=next(b for b in app.buttons if b.cget('text')=='管理图片素材库')
+            self.assertIn(button,app.hover_help.providers)
+        finally:app.destroy()
+        self.assertIn('平铺次数',ae_help.topic('重置缩放、偏移和裁剪').body)
+        self.assertNotIn('当前输入不完整',ae_help.topic('粘贴设置').body)
+
     def test_picture_library_can_open_without_a_client_or_vehicle(self):
         from wotcamo import preview3d
         app=Workbench()

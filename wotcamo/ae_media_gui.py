@@ -59,17 +59,20 @@ class ClipPreview(tk.Toplevel):
     def __init__(self,parent,clip,values):
         super().__init__(parent);prepare_dialog(self,'动画素材预览');self.geometry('540x380');self.minsize(480,340);self.transient(parent)
         self.clip=clip;self.values=ae.config(values)
+        self.hover_help=HoverHelp(self)
         with Image.open(clip['atlas']) as image:self.atlas=ae.appearance_rgba(image,self.values)
         self.started=time.monotonic();self.paused=None;self.last_frame=-1;self.timer=None;self.photo=None
         box=ttk.Frame(self,padding=15,style='Backdrop.TFrame');box.pack(fill='both',expand=True)
+        # 先为操作栏留位，小窗口也能暂停、重播和关闭。
+        actions=ttk.Frame(box);actions.pack(side='bottom',fill='x',pady=(10,0))
+        self.play_button=ttk.Button(actions,text='暂停',command=self.toggle);self.play_button.pack(side='left')
+        self.restart_button=ttk.Button(actions,text='从头播放',command=self.restart);self.restart_button.pack(side='left',padx=8)
+        self.close_button=ttk.Button(actions,text='关闭',command=self.destroy);self.close_button.pack(side='right')
+        for button,key in [(self.play_button,'media_play'),(self.restart_button,'media_restart'),(self.close_button,'media_close')]:self.hover_help.attach(button,lambda event,k=key:ae_help.topic(k))
         self.canvas=tk.Canvas(box,width=480,height=250,highlightthickness=0,bg='#152033');self.canvas.pack(fill='both',expand=True);register_widget(self.canvas,'surface')
         self.canvas.bind('<Configure>',lambda event:self.draw_frame(force=True))
         self.label=tk.StringVar(self);ttk.Label(box,textvariable=self.label).pack(anchor='w',pady=5)
         ttk.Label(box,text='检查素材播放与透明边缘；车身位置请打开三维预览。此处不是游戏内曝光。',wraplength=490,style='Muted.TLabel').pack(anchor='w')
-        actions=ttk.Frame(box);actions.pack(fill='x',pady=(10,0))
-        self.play_button=ttk.Button(actions,text='暂停',command=self.toggle);self.play_button.pack(side='left')
-        ttk.Button(actions,text='从头播放',command=self.restart).pack(side='left',padx=8)
-        ttk.Button(actions,text='关闭',command=self.destroy).pack(side='right')
         self.bind('<Destroy>',self.cleanup,add='+');self.tick()
 
     def tick(self):
@@ -77,6 +80,7 @@ class ClipPreview(tk.Toplevel):
         self.timer=self.after(max(16,round(1000/self.values['fps'])),self.tick)
 
     def draw_frame(self,force=False):
+        # 用经过时间选帧，避免 Tk 定时回调延迟让动画越播越慢。
         elapsed=self.paused if self.paused is not None else time.monotonic()-self.started
         frame=int(elapsed*self.values['fps'])%self.clip['frames']
         if force or frame!=self.last_frame:
