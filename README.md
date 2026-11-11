@@ -1,10 +1,10 @@
-# WOT 涂装工作台 3.6 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.7 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
 ## English
 
-WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.6 adds adjustable multicolour meteor rain and fixes colour entry and live colour updates. It includes 36 importable and exportable AE presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
+WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.7 imports GIF/video animations directly, with segment selection, resampling, optional black-background transparency and a standalone animation preview. It includes 36 importable and exportable AE presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
 
 ### Features
 
@@ -14,6 +14,12 @@ WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tank
 - **Lighting:** open an existing camouflage or project in the light editor, select light surfaces, adjust colors and animation recipes, and preview the result.
 - **AE effects:** import transparent animations or use 36 presets; recolour, copy/paste parameters, preserve the image aspect ratio, repeat patterns, fit them to armor, crop, scale and configure mirrored sides.
 - **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
+
+### New in 3.7: import GIF and video elements
+
+In the AE editor, choose **导入 GIF / 视频动画…**, select a local GIF, MP4, MOV, WEBM, AVI, MKV or M4V, then choose its start/end times, output FPS and background handling. Each import supports up to 128 frames at 1–60 FPS; the dialog shows the selected duration and frame count. Video reading depends on its codec; the portable build includes the decoder. Audio is omitted.
+
+GIF timing, disposal and transparency are sampled into the existing atlas format. Ordinary video can keep its rectangular picture or convert a black background into an additive light effect. Import replaces the current animation, retaining vehicle placement. The new standalone preview plays, pauses and restarts the material without a client; existing colour, fitting, project and preset controls remain available. This version delivers the requested import feature; the reported static-package flicker remains for the next investigation.
 
 ### New in 3.6: adjustable meteor rain and colour fixes
 
@@ -39,7 +45,7 @@ Settings are saved in editable projects and exported presets, and applied to gen
 
 ### Download and run
 
-Extract the supplied **3.6 local portable ZIP** to a writable folder and run `启动wot涂装工作台 3.6.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. Project introductions, release notes and acknowledgements stay outside the portable ZIP. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
+Extract the supplied **3.7 local portable ZIP** to a writable folder and run `启动wot涂装工作台 3.7.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. Project introductions, release notes and acknowledgements stay outside the portable ZIP. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
 
 ### Earlier R1 changes
 
@@ -49,7 +55,7 @@ Extract the supplied **3.6 local portable ZIP** to a writable folder and run `�
 
 ### Validation
 
-Version 3.6 passed 102 backend checks and 40 isolated desktop UI checks, plus preview interaction scripts. The portable build repeats the backend and desktop suites with its included runtime. Export checks use synthetic fixtures to compare preview/export geometry and recoloured texture pixels; they do not prove native shader rendering. Complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). The actual running client is unconfirmed. These editor features do not establish a fix for the separately reported in-game flicker.
+Version 3.7 passed 110 backend checks and 43 isolated desktop UI checks, plus preview interaction scripts. The portable build repeats the backend and desktop suites with its included runtime and video decoder. Export checks use synthetic fixtures to compare imported media, preview/export geometry and texture pixels; they do not prove native shader rendering. Complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). The actual running client is unconfirmed. The reported static-package flicker remains for the next investigation.
 
 ### Acknowledgements
 
@@ -58,6 +64,12 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ---
 
 ## 中文版
+
+### 3.7 新增：GIF / 视频动画元素直接导入
+
+AE 窗口点击 **导入 GIF / 视频动画…**，选择片段时间、1～60 FPS 和背景处理，最多转换 128 帧。支持 GIF、MP4、MOV、WEBM、AVI、MKV、M4V；便携包自带视频读取组件，实际支持还取决于素材编码，仅导入画面，不含音轨。GIF 按原逐帧延时和清除方式取样；普通视频可保留完整矩形画面，黑底光效可转为透明。
+
+导入后自动打开素材动画预览，可暂停、继续及重播，无需先选择客户端。导入替换当前动画，车辆和摆放参数保留；之后可继续调色、贴面、裁剪并保存工程或预设。此次先交付新功能，静帧闪烁按用户安排留到下个包排查。
 
 ### 3.6 新增：可调色的彩色流星雨，修正改色反馈
 
@@ -90,7 +102,7 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 - **AE 特效：** 导入透明动画或使用 36 款预设，调色、复制/粘贴参数，按原比例适配或重复平铺，调整位置、贴合装甲、裁剪、长宽及左右双侧。
 - **校验与安装：** 查看产物报告和哈希，向所选客户端安装并备份，按安装记录回滚。文件校验不能代替游戏内测试。
 
-3.6 本地便携包解压到可写目录后运行「启动wot涂装工作台 3.6.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.6 源码与预设；源码不包含便携版运行环境。内置全部 36 款可导入、导出的 AE 特效预设，保留原 35 款总览和逐款动画，新流星雨预览位于「程序/预设/AE预览」。
+3.7 本地便携包解压到可写目录后运行「启动wot涂装工作台 3.7.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.7 源码与预设；源码不包含便携版运行环境。内置全部 36 款可导入、导出的 AE 特效预设，保留原 35 款总览和逐款动画，新流星雨预览位于「程序/预设/AE预览」。
 
 ## 可选液态玻璃界面
 
@@ -118,7 +130,7 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 
 ## 验证范围
 
-3.6 完成 102 项后台回归、40 项隔离桌面真实界面检查，以及三维预览交互脚本检查。最终便携包使用自带运行环境复核相同后台和界面测试；复核不计为新增测试。界面检查在独立桌面运行，不切换当前桌面，不操作游戏。导出测试使用合成夹具，比较改色像素、预览与导出网格、参数和原始资源，不能证明原生着色器或游戏整车加载成功。
+3.7 完成 110 项后台回归、43 项隔离桌面真实界面检查，以及三维预览交互脚本检查。最终便携包使用自带运行环境和视频读取组件复核相同后台和界面测试；复核不计为新增测试。界面检查在独立桌面运行，不切换当前桌面，不操作游戏。导出测试使用合成夹具，比较媒体导入、改色像素、预览与导出网格及原始资源，不能证明原生着色器或游戏整车加载成功。
 
 此前欧服 Pz70 原涂装属于用户确认可用的基线，并非代理亲自游戏实测。本次实际运行客户端尚未确认，未安装或启动游戏；整车加载、实际光效、遮挡和远近显示状态均为 not_tested。此次制作器功能更新不代表此前反馈的游戏内闪烁已经解决。实际客户端或最终生成包改变后，需重新核对并游戏内验证。
 

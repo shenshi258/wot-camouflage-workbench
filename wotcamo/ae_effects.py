@@ -139,11 +139,11 @@ def read_rgba(path):
 def natural(path):
     return [int(x) if x.isdigit() else x.casefold() for x in re.split(r'(\d+)',Path(path).name)]
 
-def pack_frames(frames,destination,premultiplied=False):
+def pack_frames(frames,destination,premultiplied=False,*,allow_opaque=False):
     if not 1<=len(frames)<=MAX_FRAMES:raise ValueError('一次导入 1～128 帧；请缩短片段或降低导出帧率。')
     if len({im.size for im in frames})!=1:raise ValueError('序列帧尺寸必须一致。')
     w,h=frames[0].size
-    if not any(im.getchannel('A').getextrema()[0]<255 for im in frames):raise ValueError('素材完全不透明，请导出透明背景。')
+    if not allow_opaque and not any(im.getchannel('A').getextrema()[0]<255 for im in frames):raise ValueError('素材完全不透明，请导出透明背景。')
     if not any(im.getchannel('A').getextrema()[1]>0 for im in frames):raise ValueError('所有帧均完全透明，无法制作可见特效。')
     # Bound upload size independently of AE render dimensions; preserve aspect.
     ratio=min(1,512/max(w,h));cw,ch=max(1,round(w*ratio)),max(1,round(h*ratio))

@@ -12,6 +12,46 @@ class AEGUITests(unittest.TestCase):
         self.app.values['angle'].set('37');self.assertEqual(self.app.collect()['angle'],37)
         self.assertFalse(hasattr(self.app,'direction_buttons'))
 
+    def test_media_dialog_checks_frame_limit_and_submits_the_selected_segment(self):
+        from wotcamo.ae_media_gui import MediaImportDialog
+        info=dict(name='动画.gif',width=320,height=180,duration=12,native_fps=30)
+        submitted=[];dialog=MediaImportDialog(self.app,info,submitted.append)
+        self.app.update()
+        self.assertEqual(float(dialog.parameters['fps'].get()),10)
+        dialog.parameters['fps'].set('24');self.assertTrue(dialog.import_button.instate(['disabled']))
+        dialog.parameters['end'].set('4');self.assertTrue(dialog.import_button.instate(['!disabled']))
+        for field in list(dialog.fields.values())+[dialog.mode_combo,dialog.import_button]:self.assertIn(field,dialog.hover_help.providers)
+        dialog.alpha_mode.set('黑底转透明（光效）');dialog.import_button.invoke()
+        self.assertEqual(submitted,[dict(start=0.,end=4.,fps=24.,alpha_mode='black')])
+        self.assertFalse(dialog.winfo_exists())
+
+    def test_media_import_updates_playback_and_blend_but_keeps_vehicle_placement(self):
+        from unittest.mock import patch
+        app=self.app;app.source.set('current.wotmod');project={'ae_selection':{'groups':[]}};app.project=project
+        app.values['x'].set('2');app.mirror.set(True)
+        clip=dict(frame_size=[64,32],size=[128,64],frames=6,import_info=dict(fps=6))
+        options=dict(start=0,end=1,fps=6,alpha_mode='black')
+        with patch.object(app,'job',side_effect=lambda work,done:done(work())),patch('wotcamo.ae_gui.ae_media.import_media',return_value=clip),patch.object(app,'preview_clip') as preview:
+            app.import_media('video.mp4',options);preview.assert_called_once()
+        self.assertEqual(app.collect()['fps'],6);self.assertEqual(app.collect()['blend'],'add')
+        self.assertEqual(app.collect()['x'],2);self.assertTrue(app.collect()['mirror']);self.assertIs(app.project,project)
+        self.assertEqual(app.source.get(),'current.wotmod');self.assertIs(app.clip,clip)
+
+    def test_clip_preview_plays_without_client_and_cleans_up_its_timer(self):
+        from PIL import Image
+        from unittest.mock import patch
+        from wotcamo import ae_effects as ae
+        from wotcamo.ae_media_gui import ClipPreview
+        clip=ae.pack_frames([Image.new('RGBA',(32,16),(255,0,0,128)),Image.new('RGBA',(32,16),(0,255,0,128))],self.app.work/'preview.png')
+        with patch('wotcamo.ae_media_gui.time.monotonic',return_value=10):
+            viewer=ClipPreview(self.app,clip,dict(fps=6));self.app.update()
+            self.assertEqual(viewer.last_frame,0);self.assertIsNotNone(viewer.photo)
+            viewer.toggle();self.assertIsNotNone(viewer.paused)
+            viewer.toggle();self.assertIsNone(viewer.paused)
+            viewer.restart();timer=viewer.timer;viewer.destroy()
+        self.assertIsNone(viewer.timer);self.assertNotIn(timer,self.app.tk.call('after','info'))
+        self.assertEqual(self.app.client.get(),'')
+
     def test_typing_or_pasting_a_colour_enables_tint_and_restore_keeps_original(self):
         app=self.app;entry=app.fields['tint_color']
         app.param_tabs.select(4);app.update();entry.focus_force();app.update()

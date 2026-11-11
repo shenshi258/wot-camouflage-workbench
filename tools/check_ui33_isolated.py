@@ -49,7 +49,7 @@ def main():
             result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names))
     print('TESTED_PROGRAM',program,flush=True)
     print('ISOLATED_UI_SUITE',result.testsRun,len(result.failures),len(result.errors),flush=True)
-    return 0 if result.testsRun==40 and result.wasSuccessful() else 1
+    return 0 if result.testsRun==43 and result.wasSuccessful() else 1
 
 
 if __name__=='__main__':raise SystemExit(main())

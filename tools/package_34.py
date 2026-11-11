@@ -1,5 +1,7 @@
 """Build a versioned portable release from the preserved 3.3 R1 runtime ZIP."""
 import argparse,ast,hashlib,json,os,re,shutil,subprocess,sys,unittest,zipfile
+import importlib.metadata as package_metadata
+import importlib.util as import_util
 from pathlib import Path,PurePosixPath
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from wotcamo.common import ROOT
@@ -11,7 +13,7 @@ def digest(path):
 def copy(source,target):
     shutil.copytree(source,target,dirs_exist_ok=True,ignore=shutil.ignore_patterns('.cache','__pycache__','*.bak','result'))
 
-def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_markers=(),preset_count=35,extra_guide=''):
+def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_markers=(),preset_count=35,extra_guide='',runtime_packages=()):
     if version!=__version__:raise RuntimeError('打包器版本与源码不一致，请使用当前版本的打包入口。')
     parser=argparse.ArgumentParser();parser.add_argument('--workspace',type=Path,required=True)
     parser.add_argument('--revision',default='')
@@ -49,6 +51,17 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
             with z.open(entry) as inp,dest.open('wb') as output:shutil.copyfileobj(inp,output)
     (out/'启动wot涂装工作台 3.3.cmd').rename(out/('启动wot涂装工作台 '+version+'.cmd'))
     program=out/'程序';copy(ROOT/'wotcamo',program/'wotcamo');copy(ROOT/'预设',program/'预设')
+    dependencies=[]
+    for module_name,distribution_name in runtime_packages:
+        spec=import_util.find_spec(module_name)
+        if spec is None or not spec.submodule_search_locations:raise RuntimeError('缺少打包组件：'+module_name)
+        package_dir=Path(spec.origin).parent
+        copy(package_dir,program/'runtime/Lib/site-packages'/module_name)
+        distribution=package_metadata.distribution(distribution_name)
+        metadata_file=next(p for p in distribution.files if p.name=='METADATA' and str(p.parent).endswith('.dist-info'))
+        metadata_dir=Path(distribution.locate_file(metadata_file)).parent
+        copy(metadata_dir,program/'runtime/Lib/site-packages'/metadata_dir.name)
+        dependencies.append(dict(module=module_name,distribution=distribution_name,version=distribution.version))
     for folder in ('wotcamo','tests','tools','config','blender','reference','预设'):copy(ROOT/folder,source/folder)
     # 项目介绍、双语更新说明及致谢保留在源码中，不附进便携包。
     for filename in ('README.md',version+'更新说明.md'):shutil.copy2(ROOT/filename,source/filename)
@@ -72,7 +85,7 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
     with (evidence/'包内界面复核.txt').open('w',encoding='utf-8') as log:
         run=subprocess.run([str(program/'runtime/python.exe'),'-s','-B',str(source/'tools/check_ui33_isolated.py'),'--program',str(program),'--tests',str(source)],cwd=program,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=0x08000000)
     assert run.returncode==0,(evidence/'包内界面复核.txt').read_text(encoding='utf-8')
-    verification=dict(version=version,revision=args.revision,base_sha256=digest(base),background_tests=backend_count,isolated_desktop_tests=ui_count,preview_script_checks=list(web_markers),packaged_runtime_recheck=True,presets=preset_count,
+    verification=dict(version=version,revision=args.revision,base_sha256=digest(base),background_tests=backend_count,isolated_desktop_tests=ui_count,preview_script_checks=list(web_markers),packaged_runtime_recheck=True,presets=preset_count,runtime_dependencies=dependencies,
         export_test_scope='Synthetic fixtures; PNG/DDS, material appearance, aspect fitting, per-tile clipping and preview/export geometry checks. No game or native shader execution.',
         actual_running_client='not_confirmed',in_game_tested=False,whole_vehicle_loading=dict(status='not_tested'),visual_effect_observation='not_tested')
     (evidence/'验证范围.json').write_text(json.dumps(verification,ensure_ascii=False,indent=2),encoding='utf-8')

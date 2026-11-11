@@ -1,11 +1,11 @@
-"""Desktop authoring window for AE-exported transparent PNG animations."""
+"""Desktop authoring window for imported animated effects."""
 import argparse,copy,os,queue,subprocess,sys,tempfile,threading
 from datetime import datetime
 from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox,simpledialog,colorchooser
 from .common import ROOT
-from . import ae_effects as ae,ae_presets,ae_help,preview3d,APP_NAME
+from . import ae_effects as ae,ae_presets,ae_help,ae_media,ae_media_gui,preview3d,APP_NAME
 from .light_tooltips import HoverHelp
 from .ui_theme import configure_theme, build_header, prepare_dialog, style_listbox, register_widget, lock_controls, unlock_controls, start_progress, stop_progress
 
@@ -34,7 +34,7 @@ class AEImporter(tk.Tk):
         self.source=tk.StringVar(value=source);self.client=tk.StringVar(value=client);self.baseline=tk.BooleanVar(value=False)
         self.title_value=tk.StringVar(value='我的AE特效');self.premult=tk.BooleanVar(value=False)
         self.columns=tk.StringVar(value='4');self.rows=tk.StringVar(value='4');self.count=tk.StringVar(value='16')
-        self.note=tk.StringVar(value='选择涂装包，再导入 AE 导出的透明 PNG 素材。')
+        self.note=tk.StringVar(value='选择涂装包，再导入 GIF / 视频或透明 PNG 动画素材。')
         self.clip_note=tk.StringVar(value='尚未导入素材');self.client_note=tk.StringVar()
         self.values={k:tk.StringVar(value=str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','mirror','blend','placement','fit_mode')}
         self.fit_mode=tk.StringVar(value=next(k for k,v in ae.FIT_MODES.items() if v=='stretch'))
@@ -103,16 +103,18 @@ class AEImporter(tk.Tk):
             ttk.Entry(row,textvariable=var,state='readonly',width=27).pack(side='left',fill='x',expand=True);self.button(row,'选择',command).pack(side='left',padx=(6,0))
         ttk.Label(left,textvariable=self.client_note,foreground='#58657a',wraplength=325).pack(anchor='w')
         ttk.Checkbutton(left,text='我确认原涂装在所选客户端\n可以正常显示',variable=self.baseline).pack(anchor='w',pady=(8,15))
-        ttk.Separator(left).pack(fill='x',pady=(0,12));ttk.Label(left,text='AE 导出的透明 PNG',font=('Microsoft YaHei UI',11,'bold')).pack(anchor='w')
+        ttk.Separator(left).pack(fill='x',pady=(0,12));ttk.Label(left,text='自定义动画素材',font=('Microsoft YaHei UI',11,'bold')).pack(anchor='w')
+        self.button(left,'导入 GIF / 视频动画…',self.choose_media).pack(fill='x',pady=(8,0))
         row=ttk.Frame(left);row.pack(fill='x',pady=10)
         self.button(row,'导入序列帧…',self.choose_frames).pack(side='left',fill='x',expand=True);self.button(row,'选择帧文件夹…',self.choose_folder).pack(side='left',fill='x',expand=True,padx=(7,0))
         self.button(left,'导入 PNG 图集…',self.choose_sheet).pack(fill='x')
+        self.button(left,'预览素材动画',self.preview_clip).pack(fill='x',pady=(7,0))
         row=ttk.Frame(left);row.pack(fill='x',pady=9)
         for label,var in [('列',self.columns),('行',self.rows),('帧数',self.count)]:
             ttk.Label(row,text=label).pack(side='left',padx=(0,4));ttk.Entry(row,textvariable=var,width=5).pack(side='left',padx=(0,10))
-        ttk.Checkbutton(left,text='素材为黑底预乘 Alpha',variable=self.premult).pack(anchor='w',pady=5)
+        ttk.Checkbutton(left,text='PNG 素材为黑底预乘 Alpha',variable=self.premult).pack(anchor='w',pady=5)
         ttk.Label(left,textvariable=self.clip_note,wraplength=320,foreground='#2266ae').pack(anchor='w',pady=(12,8))
-        ttk.Label(left,text='最多 128 帧、1～60 FPS。\n图集按从左到右、从上到下读取。\n建议 AE 导出 RGB＋Alpha / 直通。',wraplength=325,foreground='#58657a').pack(anchor='w',pady=5)
+        ttk.Label(left,text='最多 128 帧、1～60 FPS。\nGIF / 视频可先截取片段并设置帧率。\nPNG 图集按从左到右、从上到下读取。',wraplength=325,foreground='#58657a').pack(anchor='w',pady=5)
         # The whole right column must remain reachable when the footer and
         # preset header consume most of a compact or high-DPI window.
         right_outer=ttk.Frame(body);right_outer.grid(row=0,column=1,sticky='nsew')
@@ -510,6 +512,26 @@ class AEImporter(tk.Tk):
 
     def imported(self,clip):
         self.clip=clip;w,h=clip['frame_size'];self.clip_note.set('%d 帧 · 原始 %d×%d · 图集 %d×%d · 已保留透明通道'%(clip['frames'],w,h,*clip['size']));self.note.set('素材已导入。可打开三维预览，或调整宽度、位置和帧率。');self.changed()
+
+    def choose_media(self):
+        if self.busy:return
+        path=filedialog.askopenfilename(parent=self,title='选择 GIF 或视频动画',filetypes=[('GIF / 视频','*.gif *.mp4 *.mov *.webm *.avi *.mkv *.m4v'),('GIF','*.gif'),('视频','*.mp4 *.mov *.webm *.avi *.mkv *.m4v')])
+        if path:
+            self.job(lambda:ae_media.probe(path),lambda info:ae_media_gui.MediaImportDialog(self,info,lambda options:self.import_media(path,options)))
+
+    def import_media(self,path,options):
+        dest=self.work/('media_'+datetime.now().strftime('%H%M%S%f')+'.png')
+        def done(clip):
+            self.values['fps'].set(str(clip['import_info']['fps']))
+            self.blend.set('发光叠加' if options['alpha_mode']=='black' else '普通透明')
+            self.imported(clip);self.preview_clip()
+        self.job(lambda:ae_media.import_media(path,dest,**options),done)
+
+    def preview_clip(self):
+        if self.busy:return
+        if not self.clip:return messagebox.showinfo('动画素材','请先导入动画或套用一个预设。',parent=self)
+        try:ae_media_gui.ClipPreview(self,self.clip,self.collect())
+        except (ValueError,OSError) as error:messagebox.showerror('素材无法预览',str(error),parent=self)
 
     def choose_frames(self):
         paths=filedialog.askopenfilenames(parent=self,title='选择同一组 PNG 序列帧（按文件名数字排序）',filetypes=[('透明 PNG','*.png')])
