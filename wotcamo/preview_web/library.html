@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{APP_NAME}} · 图片素材库</title>
+<link rel="stylesheet" href="./ui-theme.css"><link rel="stylesheet" href="./asset-library.css">
+<style>*{box-sizing:border-box}html,body{height:100%;margin:0;font:14px "Microsoft YaHei UI",sans-serif}body{display:flex;flex-direction:column}header{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:13px 20px;border-bottom:1px solid var(--ui-border)}h1{font-size:17px;margin:0}header p{margin:0;color:var(--ui-muted);font-size:12px}main{flex:1;min-height:0;padding:14px;display:flex}#library{width:100%;border-radius:9px}.asset-grid{grid-template-columns:repeat(auto-fill,minmax(118px,1fr))}.asset-tile img{height:98px;flex-basis:98px}.asset-toolbar{padding:12px}.asset-heading strong{font-size:17px}.asset-filters input{max-width:460px}.asset-selected{padding:12px}.asset-edit{max-width:580px}</style></head>
+<body><header><span class="brandMark" aria-hidden="true"></span><h1>{{APP_NAME}} · 图片素材库</h1><p>自行导入图片，按名称与分类管理；在三维贴图中点选复用。</p></header><main><div id="library"></div></main>
+<script type="module">
+import {AssetLibrary} from './asset_library.js';
+const library=new AssetLibrary(document.getElementById('library'));library.load().catch(error=>library.error(error));window.assetLibrary=library;
+async function syncTheme(){try{const response=await fetch('./status');const state=await response.json();document.body.classList.toggle('glass-ui',!!state.uiTheme);}catch{} }
+syncTheme();setInterval(syncTheme,1200);
+window.addEventListener('beforeunload',()=>navigator.sendBeacon('./closed',JSON.stringify({closed:true})));
+</script></body></html>

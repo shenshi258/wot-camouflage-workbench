@@ -4,6 +4,7 @@ import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
 import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+import {AssetLibrary} from './asset_library.js';
 
 const $=id=>document.getElementById(id), base=new URL('./',location.href);
 const paintMode=new URLSearchParams(location.search).get('paint')==='1';
@@ -524,7 +525,7 @@ function pickAt(x,y,event={}){
 }
 let areaMode=false,areaStart=null,areaFaces=new Map(),areaOverlays=[];
 let paintImage=null,paintBase64=null,paintHit=null,paintCanvas=null,paintTexture=null,paintChanged=[];
-const paintLayers=[];let paintTextures=[],paintBusy=false,paintFileRevision=0;
+const paintLayers=[];let paintTextures=[],paintBusy=false,paintFileRevision=0,paintLibrary=null;
 function resetPaint(){
  for(const [object,map] of paintChanged)object.material.map=map;
  paintChanged=[];for(const map of paintTextures)map.dispose();paintTextures=[];paintTexture=null;paintCanvas=null;dirty=true;
@@ -594,22 +595,33 @@ function paintPick(x,y){
  if(!paintImage){$('paintStatus').textContent='已选择模型位置，请导入图片。';return;}
  updatePaint();
 }
+async function loadPaintFile(file){
+ if(!file)return false;
+ if(paintBusy){$('paintStatus').textContent='正在生成，请完成后再载入图片。';return false;}
+ if(!['image/png','image/jpeg','image/webp'].includes(file.type)){$('paintStatus').textContent='请选择 PNG、JPG 或 WebP 图片。';return false;}
+ if(file.size>8*1024*1024){$('paintStatus').textContent='图片不能超过 8 MB。';return false;}
+ const revision=++paintFileRevision;
+ return new Promise(resolve=>{
+  const reader=new FileReader();reader.onerror=()=>{$('paintStatus').textContent='图片读取失败。';resolve(false);};
+  reader.onload=()=>{const data=String(reader.result),image=new Image();image.onload=()=>{
+   if(revision!==paintFileRevision||paintBusy){resolve(false);return;}
+   if(image.naturalWidth*image.naturalHeight>25000000){$('paintStatus').textContent='图片超过 2500 万像素。';resolve(false);return;}
+   paintImage=image;paintBase64=data.split(',')[1];$('paintStatus').textContent='图片已载入，请点击模型表面。';updatePaint();resolve(true);
+  };image.onerror=()=>{$('paintStatus').textContent='图片格式不支持。';resolve(false);};image.src=data;};reader.readAsDataURL(file);
+ });
+}
+function setLibraryOpen(open){
+ $('libraryPanel').hidden=!open;document.body.classList.toggle('library-open',open);$('paintLibrary').setAttribute('aria-expanded',String(open));
+ if(open)paintLibrary.load().catch(error=>paintLibrary.error(error));
+}
 function setupPaint(){
  if(!paintMode)return;
- $('paintTools').hidden=false;document.title='wot涂装工作台 3.3 · 三维模型贴图';$('modeTitle').textContent='三维模型贴图';
+ $('paintTools').hidden=false;document.title=document.querySelector('h1').textContent+' · 三维模型贴图';$('modeTitle').textContent='三维模型贴图';
  $('selectionTools').hidden=true;$('playbackTools').hidden=true;
  $('hint').textContent='拖动旋转 · 右键平移 · 滚轮缩放 · 点击放置图片';
- $('paintFile').onchange=()=>{
-  const file=$('paintFile').files[0];if(!file)return;
-  if(!['image/png','image/jpeg','image/webp'].includes(file.type)){$('paintStatus').textContent='请选择 PNG、JPG 或 WebP 图片。';return;}
-  if(file.size>8*1024*1024){$('paintStatus').textContent='图片不能超过 8 MB。';return;}
- const revision=++paintFileRevision,reader=new FileReader();reader.onerror=()=>{$('paintStatus').textContent='图片读取失败。';};
-  reader.onload=()=>{const data=String(reader.result),image=new Image();image.onload=()=>{
-   if(revision!==paintFileRevision)return;
-   if(image.naturalWidth*image.naturalHeight>25000000){$('paintStatus').textContent='图片超过 2500 万像素。';return;}
-   paintImage=image;paintBase64=data.split(',')[1];$('paintStatus').textContent='图片已载入，请点击模型表面。';updatePaint();
-  };image.onerror=()=>{$('paintStatus').textContent='图片格式不支持。';};image.src=data;};reader.readAsDataURL(file);
- };
+ paintLibrary=new AssetLibrary($('libraryPanel'),{onUse:file=>loadPaintFile(file),onClose:()=>setLibraryOpen(false),isBusy:()=>paintBusy});
+ $('paintLibrary').onclick=()=>setLibraryOpen($('libraryPanel').hidden);
+ $('paintFile').onchange=()=>loadPaintFile($('paintFile').files[0]);
  $('paintScale').oninput=()=>{$('paintScaleValue').textContent=Math.round(Number($('paintScale').value)*100)+'%';updatePaint();};
  $('paintAngle').oninput=()=>{$('paintAngleValue').textContent=$('paintAngle').value+'°';updatePaint();};
  $('paintSave').onclick=saveCurrentPaint;
@@ -622,10 +634,11 @@ function setupPaint(){
   if(layers.length>32){$('paintStatus').textContent='最多导出 32 张图片，请先清除当前图片或撤销上一张。';return;}
   const btn=$('paintExport');btn.disabled=true;$('paintStatus').textContent='正在生成并检查贴图，请稍候…';
   paintBusy=true;for(const id of ['paintSave','paintUndo','paintClear','paintFile','paintScale','paintAngle'])$(id).disabled=true;
+  paintLibrary.updateButtons();
   try{const response=await post('paint',{title:$('paintName').value,layers:layers.map(paintPayload)});
    const data=await response.json();if(!response.ok)throw Error(data.error||'生成失败');
    $('paintStatus').textContent='待测包已生成：'+data.path;
-  }catch(e){$('paintStatus').textContent='生成失败：'+String(e.message||e);}finally{paintBusy=false;btn.disabled=false;for(const id of ['paintSave','paintClear','paintFile','paintScale','paintAngle'])$(id).disabled=false;paintCounter();}
+  }catch(e){$('paintStatus').textContent='生成失败：'+String(e.message||e);}finally{paintBusy=false;btn.disabled=false;for(const id of ['paintSave','paintClear','paintFile','paintScale','paintAngle'])$(id).disabled=false;paintCounter();paintLibrary.updateButtons();}
  };
 }
 

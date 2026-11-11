@@ -22,17 +22,21 @@ from . import __version__, APP_NAME
 
 
 class Session:
-    def __init__(self,project,client,launch=True,paint=None,effect=None):
+    def __init__(self,project,client,launch=True,paint=None,effect=None,library_only=False,library_root=None):
         self.token=secrets.token_urlsafe(24);self.events=queue.Queue();self.metrics={};self.closed=False
+        project=project if project is not None else dict(recipe={},lights=[])
         self.paint=paint;self.project=project;self.client=client;self._paint_lock=threading.Lock()
+        from .asset_library import Library
+        self.library_only=library_only;self.library_available=bool(paint) or library_only;self.library=Library(library_root)
         self.folder=ROOT/'.cache/preview3d_sessions'/secrets.token_hex(12);self.folder.mkdir(parents=True)
         self.state={};self._signature=None;self._revision=-1;self.worker=None;self.viewer=None
         self.effect=None
         if effect:self.update_effect(*effect)
         self._body=None;self._ready=None;self._lock=threading.Lock()
-        assets.save_snapshot(project,self.folder)
-        cache=ROOT/'.cache/preview3d_models';cache.mkdir(parents=True,exist_ok=True)
-        assets.write_json(self.folder/'request.json',dict(client=str(client),cache=str(cache)))
+        if not library_only:
+            assets.save_snapshot(project,self.folder)
+            cache=ROOT/'.cache/preview3d_models';cache.mkdir(parents=True,exist_ok=True)
+            assets.write_json(self.folder/'request.json',dict(client=str(client),cache=str(cache)))
         self.update(dict(recipe=project['recipe'],lights=[dict(id=x['id'],selected=x.get('selected',False),recipe=x.get('配方')) for x in project['lights']],picked=[]))
         outer=self
         class Handler(BaseHTTPRequestHandler):
@@ -54,6 +58,16 @@ class Session:
                 if route is None:return self.send(404,b'Not found','text/plain')
                 try:
                     if route=='status':return self.send(200,outer.status())
+                    if route=='library/list':
+                        if not outer.library_available:return self.send(403,b'Forbidden')
+                        return self.send(200,outer.library.list())
+                    if route.startswith('library/'):
+                        if not outer.library_available:return self.send(403,b'Forbidden')
+                        match=re.fullmatch(r'library/(image|thumb)/([a-f0-9]{64})',route)
+                        if not match:return self.send(404,b'Not found')
+                        try:raw,kind=outer.library.image(match[2],thumbnail=match[1]=='thumb')
+                        except (OSError,ValueError,KeyError):return self.send(404,dict(error='素材读取失败，请刷新或重新导入。'))
+                        return self.send(200,raw,kind)
                     if route=='effect/atlas.png' and outer.effect:
                         version=parse_qs(urlsplit(self.path).query).get('v',[''])[0]
                         if version and not re.fullmatch(r'[a-f0-9]{64}',version):return self.send(404,b'Not found')
@@ -74,20 +88,22 @@ class Session:
                     if not file.is_file():return self.send(404,b'Not found')
                     kind='text/javascript' if file.suffix=='.js' else mimetypes.guess_type(file.name)[0] or 'application/octet-stream'
                     payload=file.read_bytes()
-                    if route in ('','index.html'):
+                    if route in ('','index.html','library.html'):
                         # 预览页与桌面标题取同一版本源，避免发新版时漏改 HTML。
                         payload=payload.replace(b'{{APP_NAME}}',html.escape(APP_NAME).encode('utf-8'))
                     return self.send(200,payload,kind)
                 except (OSError,ValueError):return self.send(503,dict(message='资源正在更新'))
             def do_POST(self):
                 route=self.route();origin=self.headers.get('Origin')
-                if route not in ('select','bodyselect','metrics','closed','performance','paint','effectplace','effectparams','effectplane','effectsettings','theme') or (route=='paint' and not outer.paint) or (origin and origin!='http://127.0.0.1:%d'%outer.server.server_port):
+                if route not in ('select','bodyselect','metrics','closed','performance','paint','effectplace','effectparams','effectplane','effectsettings','theme','library/import','library/action') or (route=='paint' and not outer.paint) or (route.startswith('library/') and not outer.library_available) or (origin and origin!='http://127.0.0.1:%d'%outer.server.server_port):
                     return self.send(403,b'Forbidden')
                 try:
                     size=int(self.headers.get('Content-Length','0'))
-                    if not 0<size<=(48*1024*1024 if route=='paint' else (250000 if route=='bodyselect' else 16384)):return self.send(413,b'Too large')
+                    if not 0<size<=(48*1024*1024 if route=='paint' else (12*1024*1024 if route=='library/import' else (250000 if route=='bodyselect' else 16384))):return self.send(413,b'Too large')
                     data=json.loads(self.rfile.read(size))
                     if not isinstance(data,dict):raise ValueError('请求参数无效。')
+                    if route=='library/import':return self.send(200,outer.library.import_payload(data))
+                    if route=='library/action':return self.send(200,outer.library.action(data))
                     if route=='theme':
                         from . import ui_theme
                         if set(data)!={'glass'} or type(data['glass']) is not bool:raise ValueError('界面风格无效。')
@@ -150,11 +166,11 @@ class Session:
                     elif route=='closed':outer.events.put(dict(type='closed'))
                     return self.send(200,dict(ok=True))
                 except (ValueError,TypeError,OSError,KeyError) as error:
-                    if route in ('paint','effectparams','bodyselect'):return self.send(400,dict(error=str(error)))
+                    if route in ('paint','effectparams','bodyselect','library/import','library/action'):return self.send(400,dict(error=str(error)))
                     return self.send(400,b'Invalid request')
         self.server=ThreadingHTTPServer(('127.0.0.1',0),Handler);self.server.daemon_threads=True
         self.server_thread=threading.Thread(target=self.server.serve_forever,kwargs={'poll_interval':.1},daemon=True);self.server_thread.start()
-        self.url='http://127.0.0.1:%d/%s/index.html'%(self.server.server_port,self.token)
+        self.url='http://127.0.0.1:%d/%s/%s'%(self.server.server_port,self.token,'library.html' if library_only else 'index.html')
         if paint:self.url+='?paint=1'
         if launch:self.launch()
 
@@ -198,8 +214,9 @@ class Session:
         flags=subprocess.CREATE_NO_WINDOW if sys.platform=='win32' else 0
         self.log=(self.folder/'preview.log').open('ab')
         isolation=['-s'] if sys.flags.no_user_site else []
-        self.worker=subprocess.Popen([sys.executable,*isolation,'-m','wotcamo.preview3d_assets',str(self.folder)],cwd=ROOT,
-                                      stdout=self.log,stderr=self.log,creationflags=flags)
+        if not self.library_only:
+            self.worker=subprocess.Popen([sys.executable,*isolation,'-m','wotcamo.preview3d_assets',str(self.folder)],cwd=ROOT,
+                                          stdout=self.log,stderr=self.log,creationflags=flags)
         self.viewer=subprocess.Popen([sys.executable,*isolation,'-m','wotcamo.preview3d','--viewer',self.url,'--session',str(self.folder)],cwd=ROOT,
                                       stdout=self.log,stderr=self.log,creationflags=flags)
 
@@ -238,7 +255,8 @@ def viewer(url,smoke=None):
     except ImportError as error:raise RuntimeError('三维预览窗口组件缺失，请使用完整的工作台程序。') from error
     class Api:
         def close(self):window.destroy()
-    window=webview.create_window(APP_NAME+' · 三维预览',url,width=1100,height=720,min_size=(800,600),background_color='#0b111c',js_api=Api())
+    section='图片素材库' if urlsplit(url).path.endswith('/library.html') else '三维预览'
+    window=webview.create_window(APP_NAME+' · '+section,url,width=1100,height=720,min_size=(800,600),background_color='#0b111c',js_api=Api())
     if smoke:
         def test():
             report={};started=time.monotonic()

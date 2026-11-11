@@ -210,13 +210,20 @@ class Workbench(tk.Tk):
             self.log('三维贴图窗口已打开：点击模型并导入图片，顺序不限。')
         self.task(create,opened)
 
+    def open_asset_library(self):
+        from . import preview3d
+        def opened(session):
+            self.paint_sessions.append(session);self.log('图片素材库已打开，可批量导入、分类和搜索。')
+        self.task(lambda:preview3d.Session(None,None,library_only=True),opened)
+
     def poll_paint_sessions(self):
         """回到界面线程汇报导出结果，并回收已关闭的预览会话。"""
         self._paint_after=None
         for session in self.paint_sessions[:]:
             if session.viewer and session.viewer.poll() is not None:
                 code=session.viewer.returncode;session.close();self.paint_sessions.remove(session)
-                self.log('三维贴图窗口已关闭。' if code==0 else '三维贴图窗口退出；请检查 WebView2 Runtime。')
+                section='图片素材库' if getattr(session,'library_only',False) else '三维贴图窗口'
+                self.log(section+'已关闭。' if code==0 else section+'退出；请检查 WebView2 Runtime。')
                 continue
             try:
                 while True:
@@ -373,6 +380,7 @@ class Workbench(tk.Tk):
         paint_actions=ttk.Frame(right,style='Card.TFrame');paint_actions.pack(fill='x')
         self.button(paint_actions,'打开原版模型',lambda:self.open_paint_preview(False),True).pack(side='left')
         self.button(paint_actions,'打开已有涂装',lambda:self.open_paint_preview(True)).pack(side='left',padx=(7,0))
+        self.button(right,'管理图片素材库',self.open_asset_library).pack(anchor='w',pady=(9,0))
         ttk.Separator(right,orient='horizontal').pack(fill='x',pady=12)
         atlas_head=ttk.Frame(right,style='Card.TFrame');atlas_head.pack(fill='x')
         ttk.Label(atlas_head,text='图集预览',style='Section.TLabel').pack(side='left')
@@ -431,7 +439,7 @@ class Workbench(tk.Tk):
 
     def ae_ui(self, page):
         ttk.Label(page,text='AE 特效导入',style='PageTitle.TLabel').pack(anchor='w')
-        ttk.Label(page,text='套用 35 款内置预设，或导入透明 PNG；支持装甲吸附、裁剪及贴面横纵独立缩放。',style='PageSubtitle.TLabel',wraplength=850).pack(anchor='w',pady=(6,18))
+        ttk.Label(page,text='套用 36 款内置预设，或导入 GIF、视频及透明 PNG；支持动画预览、装甲吸附、裁剪及独立缩放。',style='PageSubtitle.TLabel',wraplength=850).pack(anchor='w',pady=(6,18))
         card=ttk.Frame(page,style='Panel.TFrame',padding=18);card.pack(fill='x')
         ttk.Label(card,text='使用自己的特效素材',style='Section.TLabel').pack(anchor='w')
         ttk.Label(card,text='支持帧率、尺寸、位置、朝向及透明混合；亮度、对比度、透明度可滑动调节，参数可随工程保存。',style='PageSubtitle.TLabel').pack(anchor='w',pady=10)

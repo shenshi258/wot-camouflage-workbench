@@ -1,10 +1,10 @@
-# WOT 涂装工作台 3.7 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.8 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
 ## English
 
-WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.7 imports GIF/video animations directly, with segment selection, resampling, optional black-background transparency and a standalone animation preview. It includes 36 importable and exportable AE presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
+WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.8 adds a persistent thumbnail library for your own image elements, with batch import, search, categories and direct reuse in 3D painting. It includes GIF/video import, 36 AE presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
 
 ### Features
 
@@ -14,6 +14,12 @@ WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tank
 - **Lighting:** open an existing camouflage or project in the light editor, select light surfaces, adjust colors and animation recipes, and preview the result.
 - **AE effects:** import transparent animations or use 36 presets; recolour, copy/paste parameters, preserve the image aspect ratio, repeat patterns, fit them to armor, crop, scale and configure mirrored sides.
 - **Validation and installation:** inspect output reports and hashes, install to the selected client with backups, and roll back using an installation record. File checks do not replace in-game testing.
+
+### New in 3.8: import your own thumbnail library
+
+Open **涂装制作 → 管理图片素材库** to batch-import PNG, JPG or WebP files/folders, search by name/category, and edit labels. The library works without selecting a client or vehicle. In the 3D painting window, open **图片素材库**, select a thumbnail and choose **使用素材**, then click the model to place it.
+
+Original image files remain unchanged. Copies and thumbnails persist under `程序/素材库/图片元素`; carry the `素材库` folder into the new program directory when upgrading. Removing an asset moves it to the library recycle folder and can be undone. Limits: 8 MB / 25 megapixels per image, 128 imports per batch, 1000 assets. Personal library content is excluded from release packages.
 
 ### New in 3.7: import GIF and video elements
 
@@ -45,7 +51,7 @@ Settings are saved in editable projects and exported presets, and applied to gen
 
 ### Download and run
 
-Extract the supplied **3.7 local portable ZIP** to a writable folder and run `启动wot涂装工作台 3.7.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. Project introductions, release notes and acknowledgements stay outside the portable ZIP. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
+Extract the supplied **3.8 local portable ZIP** to a writable folder and run `启动wot涂装工作台 3.8.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. Project introductions, release notes and acknowledgements stay outside the portable ZIP. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
 
 ### Earlier R1 changes
 
@@ -55,7 +61,7 @@ Extract the supplied **3.7 local portable ZIP** to a writable folder and run `�
 
 ### Validation
 
-Version 3.7 passed 110 backend checks and 43 isolated desktop UI checks, plus preview interaction scripts. The portable build repeats the backend and desktop suites with its included runtime and video decoder. Export checks use synthetic fixtures to compare imported media, preview/export geometry and texture pixels; they do not prove native shader rendering. Complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). The actual running client is unconfirmed. The reported static-package flicker remains for the next investigation.
+Version 3.8 passed 131 backend checks and 44 isolated desktop UI checks, plus real-browser import/search/persistence/recycle/painting-export checks and preview interaction scripts. The portable build repeats the backend and desktop suites with its included runtime and video decoder. Export checks use synthetic fixtures to compare imported media, preview/export geometry and texture pixels; they do not prove native shader rendering. Complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). The actual running client is unconfirmed. The reported static-package flicker remains for investigation.
 
 ### Acknowledgements
 
@@ -64,6 +70,12 @@ Thanks to **コイカツ** and **GPT** for their help and support.
 ---
 
 ## 中文版
+
+### 3.8 新增：自己的图片也能导入缩略图素材库
+
+打开 **涂装制作 → 管理图片素材库**，可多选图片或按文件夹导入 PNG、JPG、WebP，自动生成缩略图，支持搜索、分类、改名及移出撤销。无需先选车型或客户端。三维贴图中点击 **图片素材库**，选中缩略图后按 **使用素材**，再点模型放置；保存当前贴图后可继续添加。
+
+原图保留，素材副本和缩略图保存在「程序/素材库/图片元素」，再次打开仍能使用。升级时将旧版「素材库」文件夹复制到新版程序目录。单张最多 8 MB / 2500 万像素，每批最多 128 张，库内最多 1000 项；个人导入内容不附入新发布包。
 
 ### 3.7 新增：GIF / 视频动画元素直接导入
 
@@ -102,7 +114,7 @@ AE 窗口点击 **导入 GIF / 视频动画…**，选择片段时间、1～60 F
 - **AE 特效：** 导入透明动画或使用 36 款预设，调色、复制/粘贴参数，按原比例适配或重复平铺，调整位置、贴合装甲、裁剪、长宽及左右双侧。
 - **校验与安装：** 查看产物报告和哈希，向所选客户端安装并备份，按安装记录回滚。文件校验不能代替游戏内测试。
 
-3.7 本地便携包解压到可写目录后运行「启动wot涂装工作台 3.7.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.7 源码与预设；源码不包含便携版运行环境。内置全部 36 款可导入、导出的 AE 特效预设，保留原 35 款总览和逐款动画，新流星雨预览位于「程序/预设/AE预览」。
+3.8 本地便携包解压到可写目录后运行「启动wot涂装工作台 3.8.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.8 源码与预设；源码不包含便携版运行环境。内置全部 36 款可导入、导出的 AE 特效预设，保留原 35 款总览和逐款动画，新流星雨预览位于「程序/预设/AE预览」。
 
 ## 可选液态玻璃界面
 
@@ -130,7 +142,7 @@ AE 窗口点击 **导入 GIF / 视频动画…**，选择片段时间、1～60 F
 
 ## 验证范围
 
-3.7 完成 110 项后台回归、43 项隔离桌面真实界面检查，以及三维预览交互脚本检查。最终便携包使用自带运行环境和视频读取组件复核相同后台和界面测试；复核不计为新增测试。界面检查在独立桌面运行，不切换当前桌面，不操作游戏。导出测试使用合成夹具，比较媒体导入、改色像素、预览与导出网格及原始资源，不能证明原生着色器或游戏整车加载成功。
+3.8 完成 131 项后台回归、44 项隔离桌面真实界面检查，以及真实浏览器中的图库导入、搜索、持久保存、回收撤销、点选贴图和导出检查。最终便携包使用自带运行环境和视频读取组件复核相同后台和界面测试；复核不计为新增测试。界面检查不切换当前桌面，不操作游戏。导出测试使用合成夹具，比较媒体导入、改色像素、预览与导出网格及原始资源，不能证明原生着色器或游戏整车加载成功。
 
 此前欧服 Pz70 原涂装属于用户确认可用的基线，并非代理亲自游戏实测。本次实际运行客户端尚未确认，未安装或启动游戏；整车加载、实际光效、遮挡和远近显示状态均为 not_tested。此次制作器功能更新不代表此前反馈的游戏内闪烁已经解决。实际客户端或最终生成包改变后，需重新核对并游戏内验证。
 

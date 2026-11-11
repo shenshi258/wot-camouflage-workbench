@@ -13,7 +13,7 @@ def digest(path):
 def copy(source,target):
     shutil.copytree(source,target,dirs_exist_ok=True,ignore=shutil.ignore_patterns('.cache','__pycache__','*.bak','result'))
 
-def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_markers=(),preset_count=35,extra_guide='',runtime_packages=()):
+def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_markers=(),preset_count=35,extra_guide='',runtime_packages=(),extra_evidence=()):
     if version!=__version__:raise RuntimeError('打包器版本与源码不一致，请使用当前版本的打包入口。')
     parser=argparse.ArgumentParser();parser.add_argument('--workspace',type=Path,required=True)
     parser.add_argument('--revision',default='')
@@ -21,6 +21,7 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
     parser.add_argument('--ui-log',type=Path,default=ROOT/'.cache/appearance34_ui.log')
     parser.add_argument('--web-log',type=Path)
     args=parser.parse_args();workspace=args.workspace.resolve()
+    sys.path.insert(1,str(ROOT/'tests'))
     if args.revision and not re.fullmatch(r'R[1-9][0-9]*',args.revision):parser.error('修订名须为 R1、R2 等。')
     old='wot涂装工作台 3.3_35款预设版_R1';name='wot涂装工作台 '+version+'_'+label
     if args.revision:name+='_'+args.revision
@@ -76,9 +77,11 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
     evidence=out/'验证记录';evidence.mkdir()
     for path in (args.backend_log,args.ui_log):shutil.copy2(path,evidence/path.name)
     if args.web_log:shutil.copy2(args.web_log,evidence/args.web_log.name)
+    for relative in extra_evidence:
+        path=ROOT/relative;shutil.copy2(path,evidence/path.name)
     env=dict(os.environ,PYTHONHOME=str(program/'runtime'),PYTHONNOUSERSITE='1',PYTHONPATH='',PYTHONDONTWRITEBYTECODE='1',PYTHONIOENCODING='utf-8')
     # Run the same backend suite against the exact shipped program/runtime.
-    code="import sys,unittest;sys.path.append(sys.argv[1]);r=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(sys.argv[3:]));raise SystemExit(0 if r.testsRun==int(sys.argv[2]) and r.wasSuccessful() else 1)"
+    code="import sys,unittest;from pathlib import Path;sys.path.extend([sys.argv[1],str(Path(sys.argv[1])/'tests')]);r=unittest.TextTestRunner(verbosity=1).run(unittest.defaultTestLoader.loadTestsFromNames(sys.argv[3:]));raise SystemExit(0 if r.testsRun==int(sys.argv[2]) and r.wasSuccessful() else 1)"
     with (evidence/'包内后台复核.txt').open('w',encoding='utf-8') as log:
         run=subprocess.run([str(program/'runtime/python.exe'),'-s','-B','-c',code,str(source),str(backend_count),*tests],cwd=program,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=0x08000000)
     assert run.returncode==0,(evidence/'包内后台复核.txt').read_text(encoding='utf-8')

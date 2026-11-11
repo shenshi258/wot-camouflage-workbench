@@ -10,6 +10,16 @@ from wotcamo.gui import Workbench
 
 
 class UIReview34Tests(unittest.TestCase):
+    def test_picture_library_can_open_without_a_client_or_vehicle(self):
+        from wotcamo import preview3d
+        app=Workbench()
+        try:
+            with patch.object(app,'task',side_effect=lambda create,done:done(create())),patch.object(preview3d,'Session') as session:
+                app.open_asset_library();session.assert_called_once_with(None,None,library_only=True)
+                self.assertIn(session.return_value,app.paint_sessions)
+            self.assertTrue(any(str(button.cget('text'))=='管理图片素材库' for button in app.buttons))
+        finally:app.destroy()
+
     def test_scales_follow_theme_in_both_directions_and_disabled_focus_states(self):
         app=tk.Tk()
         try:
