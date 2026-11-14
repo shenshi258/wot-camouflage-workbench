@@ -1,0 +1,196 @@
+# -*- coding: utf-8 -*-
+"""Own-vehicle appearance selection; never change shared vehicle descriptors."""
+import copy
+import logging
+
+LOG = logging.getLogger('self_skin_converter')
+MODEL_MAP = __MODEL_MAP__
+INSIGNIA = __INSIGNIA__
+STATE_KEY = '__self_skin_state___TOKEN__'
+PARTS = ('chassis', 'hull', 'turret', 'gun')
+TYPE_ATTR = '_CommonTankAppearance__typeDesc'
+_installed = False
+
+
+def _is_own(appearance):
+    try:
+        import BigWorld
+        own_id = getattr(BigWorld.player(), 'playerVehicleID', None)
+        vehicle_id = getattr(appearance, '_CommonTankAppearance__vID', None)
+        return own_id is not None and vehicle_id is not None and own_id == vehicle_id
+    except Exception:
+        return False
+
+
+def _clone_single(descriptor, outfit):
+    # Never modify cached descriptor or shared part / model-set dictionaries.
+    active = getattr(outfit, 'modelsSet', None) or 'default'
+    changes = []
+    for name in PARTS:
+        part = getattr(descriptor, name)
+        states = part.modelsSets[active]
+        current = states.undamaged
+        if not current:
+            return None
+        target = MODEL_MAP.get(current.lower())
+        if target is None:
+            return None
+        # Preserve the original crash/explosion model when no isolated variant
+        # exists; otherwise use the isolated model only on this appearance.
+        destroyed = states.destroyed
+        exploded = states.exploded
+        if destroyed:
+            destroyed = MODEL_MAP.get(destroyed.lower(), destroyed)
+        if exploded:
+            exploded = MODEL_MAP.get(exploded.lower(), exploded)
+        new_states = type(states)(target, destroyed, exploded)
+        new_part = part.copy() if callable(getattr(part, 'copy', None)) else copy.copy(part)
+        if new_part is part:
+            return None
+        new_part.modelsSets = part.modelsSets.copy()
+        new_part.modelsSets[active] = new_states
+        if active == 'default' and hasattr(new_part, 'models'):
+            new_part.models = new_states
+        if name == 'gun' and not _adapt_insignia(descriptor, new_part):
+            return None
+        changes.append((name, new_part))
+    result = copy.copy(descriptor)
+    if result is descriptor:
+        return None
+    for name, part in changes:
+        setattr(result, name, part)
+    return result
+
+
+def _adapt_insignia(descriptor, gun):
+    """Apply recognised slot metadata to the isolated gun only."""
+    if not INSIGNIA:
+        return True
+    from Math import Vector3
+    vehicle = getattr(descriptor, 'name', '')
+    turret = getattr(getattr(descriptor, 'turret', None), 'name', '')
+    gun_name = getattr(getattr(descriptor, 'gun', None), 'name', '')
+    relevant = [x for x in INSIGNIA if x['vehicle'].lower() == vehicle.lower()
+                and x['turret'] == turret and x['gun'] == gun_name]
+    if not relevant:
+        return True
+    slots = list(getattr(gun, 'emblemSlots', ()))
+    for config in relevant:
+        matched = False
+        for index, slot in enumerate(slots):
+            if getattr(slot, 'type', None) != 'insigniaOnGun' or getattr(slot, 'slotId', None) != config['slotId']:
+                continue
+            slots[index] = slot._replace(rayStart=Vector3(*config['rayStart']),
+                                         rayEnd=Vector3(*config['rayEnd']),
+                                         rayUp=Vector3(*config['rayUp']), size=float(config['size']))
+            matched = True
+        if not matched:
+            LOG.warning('Expected insignia slot was not found; original appearance retained')
+            return False
+    gun.emblemSlots = tuple(slots)
+    return True
+
+
+def _clone(descriptor, outfit):
+    if type(descriptor).__name__ != 'CompositeVehicleDescriptor':
+        # Unknown proxy types may forward assignment into shared descriptors.
+        if hasattr(descriptor, 'defaultVehicleDescr') or hasattr(descriptor, 'siegeVehicleDescr'):
+            return None
+        return _clone_single(descriptor, outfit)
+    internal = descriptor.__dict__
+    if ('_CompositeVehicleDescriptor__vehicleDescr' not in internal
+            or '_CompositeVehicleDescriptor__siegeDescr' not in internal
+            or '_CompositeVehicleDescriptor__vehicleMode' not in internal):
+        return None
+    if (descriptor.defaultVehicleDescr is not internal['_CompositeVehicleDescriptor__vehicleDescr']
+            or descriptor.siegeVehicleDescr is not internal['_CompositeVehicleDescriptor__siegeDescr']):
+        return None
+    # Composite.__setattr__ writes into *both* nested descriptors. Rebuild its
+    # own dictionary directly and replace both sub-descriptors atomically.
+    ordinary = _clone_single(descriptor.defaultVehicleDescr, outfit)
+    siege = _clone_single(descriptor.siegeVehicleDescr, outfit)
+    if ordinary is None or siege is None:
+        return None
+    result = object.__new__(type(descriptor))
+    result.__dict__.update(internal)
+    result.__dict__['_CompositeVehicleDescriptor__vehicleDescr'] = ordinary
+    result.__dict__['_CompositeVehicleDescriptor__siegeDescr'] = siege
+    return result
+
+
+def _make_wrapper(original, *unused):
+    def wrapped(appearance, outfit_cd):
+        try:
+            prior = getattr(appearance, STATE_KEY, None)
+            current = getattr(appearance, TYPE_ATTR, None)
+            if prior and current is prior[1]:
+                setattr(appearance, TYPE_ATTR, prior[0])
+            setattr(appearance, STATE_KEY, None)
+        except Exception:
+            LOG.exception('Could not restore prior appearance')
+        outfit = original(appearance, outfit_cd)
+        if not _is_own(appearance):
+            return outfit
+        try:
+            current = getattr(appearance, TYPE_ATTR, None)
+            if current is None:
+                return outfit
+            changed = _clone(current, outfit)
+            if changed is not None:
+                setattr(appearance, STATE_KEY, (current, changed))
+                setattr(appearance, TYPE_ATTR, changed)
+        except Exception:
+            LOG.exception('Conditional model setup failed; original appearance retained')
+        return outfit
+    return wrapped
+
+
+def _make_hangar_wrapper(original):
+    def wrapped(appearance, *args, **kwargs):
+        name = '_HangarVehicleAppearance__vDesc'
+        try:
+            prior = getattr(appearance, STATE_KEY, None)
+            current = getattr(appearance, name, None)
+            if prior and current is prior[1]:
+                current = prior[0]
+                setattr(appearance, name, current)
+            setattr(appearance, STATE_KEY, None)
+            outfit = getattr(appearance, '_HangarVehicleAppearance__outfit', None)
+            changed = _clone(current, outfit) if current is not None else None
+            if changed is not None:
+                setattr(appearance, STATE_KEY, (current, changed))
+                setattr(appearance, name, changed)
+        except Exception:
+            LOG.exception('Own-vehicle hangar setup failed; original appearance retained')
+        return original(appearance, *args, **kwargs)
+    return wrapped
+
+
+def install():
+    global _installed
+    if _installed:
+        return
+    try:
+        from vehicle_appearance.common_tank_appearance import CommonTankAppearance
+        from vehicle_systems.CompoundAppearance import CompoundAppearance
+        from gui.hangar_vehicle_appearance import HangarVehicleAppearance
+        # The inspected client constructs outfit before model prerequisites.
+        method = CommonTankAppearance.prerequisites
+        function = getattr(method, 'im_func', method)
+        code = getattr(function, 'func_code', None)
+        if code is None or tuple(code.co_varnames[:code.co_argcount]) != ('self', 'vID', 'vInfo', 'renderMode'):
+            LOG.warning('Unsupported appearance API; own-vehicle skin disabled')
+            return
+        hangar_name = '_HangarVehicleAppearance__startBuild'
+        hangar_original = getattr(HangarVehicleAppearance, hangar_name)
+        for cls in (CommonTankAppearance, CompoundAppearance):
+            method = cls.__dict__.get('_prepareOutfit')
+            if method is not None:
+                setattr(cls, '_prepareOutfit', _make_wrapper(method))
+        setattr(HangarVehicleAppearance, hangar_name, _make_hangar_wrapper(hangar_original))
+        _installed = True
+    except Exception:
+        LOG.exception('Could not install conditional skin; original appearance retained')
+
+
+install()

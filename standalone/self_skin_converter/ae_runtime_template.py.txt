@@ -1,0 +1,352 @@
+# -*- coding: utf-8 -*-
+"""Attach ordinary nodeless VFX models; breathing is evaluated by native shader."""
+import logging
+import weakref
+import BigWorld
+import Math
+import AnimationSequence
+from helpers import newFakeModel
+from vehicle_systems import camouflages
+
+RIGS = []
+_log = logging.getLogger('CustomVehicle.LightMaker')
+_installed = False
+_row_first = None
+_groups = []
+FRAME_DIAGNOSTIC_REVISION = 'wheel-frame-diagnostic-1'
+FRAME_DIAGNOSTICS_ENABLED = False
+
+# The part is assembled at HP_gunJoint; its Gun inclination node (not the
+# joint or part alias) receives appearance.gunMatrix in the referenced client.
+try:
+    from vehicle_systems.tankStructure import TankNodeNames
+    _GUN_INCLINATION = TankNodeNames.GUN_INCLINATION
+except Exception:
+    _GUN_INCLINATION = 'Gun'
+
+
+def _resolve_node(compoundModel, config):
+    """Use the exact baked attachment; no part-alias fallback is supported."""
+    anchor = config['anchor']
+    return compoundModel.node(anchor), anchor
+
+
+def _matrix(rows):
+    result = Math.Matrix()
+    result.setIdentity()
+    for row in range(4):
+        for col in range(4):
+            if _row_first:
+                result.setElement(row, col, rows[row][col])
+            else:
+                result.setElement(col, row, rows[row][col])
+    return result
+
+
+def _check_matrix_api():
+    global _row_first
+    probe = Math.Matrix()
+    probe.setIdentity()
+    probe.setElement(3, 0, 2.0)
+    origin = probe.applyPoint((0.0, 0.0, 0.0))
+    _row_first = abs(origin[0] - 2.0) < 0.00001
+    rows = ((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (2, 3, 4, 1))
+    result = _matrix(rows).applyPoint((1, 2, 3))
+    if max(abs(result[i] - (3, 5, 7)[i]) for i in range(3)) > 0.00001:
+        raise RuntimeError('Native matrix element convention self-check failed')
+
+
+def _local_vehicle(vehicleDescr, compound):
+    name = getattr(getattr(vehicleDescr, 'type', None), 'name', '')
+    if '__VEHICLE_TYPE__' not in name:
+        return False
+    player = BigWorld.player()
+    if player is not None and hasattr(player, 'playerVehicleID'):
+        entity = BigWorld.entity(player.playerVehicleID)
+        appearance = getattr(entity, 'appearance', None)
+        return appearance is not None and getattr(appearance, 'compoundModel', None) is compound
+    return True
+
+
+def _sync_compound(compound):
+    alive = []
+    for reference in _groups:
+        group = reference()
+        if group is not None:
+            alive.append(reference)
+            if group.compound is compound:
+                group.sync_visibility()
+    _groups[:] = alive
+
+
+def _install_visibility_hooks():
+    # Native Vehicle.show(False) uses ShadowPassBit, not visible=False.
+    # Propagate that change to sequence-owned ordinary models immediately.
+    from vehicle_systems.CompoundAppearance import CompoundAppearance
+    def wrap(original):
+        def changed(appearance, *args, **kwargs):
+            result = original(appearance, *args, **kwargs)
+            try:
+                _sync_compound(appearance.compoundModel)
+            except Exception:
+                # Preserve the completed native visibility operation if our
+                # optional attachment is tearing down or unavailable.
+                _log.exception('Independent VFX visibility sync failed')
+            return result
+        return changed
+    for name in ('changeVisibility', 'changeDrawPassVisibility'):
+        setattr(CompoundAppearance, name, wrap(getattr(CompoundAppearance, name)))
+
+
+def _tick(reference):
+    owner = reference()
+    if owner is not None:
+        owner.tick()
+
+
+class _WarpGroup(object):
+    def __init__(self, compound, descriptor):
+        self.compound = compound
+        self.descriptor = descriptor
+        self.members = []
+        self.active = set()
+        self.callback = None
+        self.visible = None
+        self.diagnostic_frames = 0
+        _groups.append(weakref.ref(self))
+
+    def sync_visibility(self):
+        try:
+            visible = (bool(self.compound.visible)
+                       and not bool(self.compound.skipColorPass)
+                       and _local_vehicle(self.descriptor, self.compound))
+        except Exception:
+            # Unknown/tearing-down visibility must never expose an own-tank
+            # overlay in the scope. Do not change any vehicle visibility flag.
+            visible = False
+        for reference in self.members:
+            owned = reference()
+            if owned is not None:
+                owned._mount.visible = visible
+                owned._root.visible = visible
+                enabled = bool(owned._enabled and visible and not owned._detached)
+                if enabled != owned._actual_enabled:
+                    owned._native.setEnabled(enabled)
+                    owned._actual_enabled = enabled
+        if visible != self.visible:
+            self.visible = visible
+            _log.info('Independent lights visible=%s (vehicle color-pass/local-owner state)', visible)
+
+    def start(self, key):
+        self.active.add(key)
+        self.sync_visibility()
+        if self.callback is None:
+            self.callback = BigWorld.callback(0.0, lambda ref=weakref.ref(self): _tick(ref))
+
+    def tick(self):
+        self.callback = None
+        if not self.active:
+            return
+        self.sync_visibility()
+        if FRAME_DIAGNOSTICS_ENABLED:
+            self.diagnostic_frames += 1
+            if self.diagnostic_frames in (1, 30, 120):
+                self.diagnose_frames()
+        self.callback = BigWorld.callback(0.0, lambda ref=weakref.ref(self): _tick(ref))
+
+    def diagnose_frames(self):
+        """Bounded observations only: never edit a vehicle node or render state."""
+        try:
+            chassis = self.compound.node('chassis')
+            if chassis is None:
+                raise ValueError('No chassis attachment frame')
+            inverse = Math.Matrix(chassis)
+            inverse.invert()
+        except Exception:
+            _log.exception('Light frame diagnostic: chassis frame unavailable')
+            return
+        for reference in self.members:
+            owned = reference()
+            if owned is None:
+                continue
+            try:
+                node = Math.Matrix(owned._node)
+                origin = node.applyPoint((0.0, 0.0, 0.0))
+                relative = inverse.applyPoint(origin)
+                axes = [node.applyPoint(p) for p in ((1., 0., 0.), (0., 1., 0.), (0., 0., 1.))]
+                scales = [sum((axis[i] - origin[i]) ** 2 for i in range(3)) ** .5 for axis in axes]
+                mount_position = getattr(owned._mount, 'position', None)
+                _log.info('Light frame diagnostic rev=%s frame=%d id=%s enabled=%s actual=%s detached=%s started=%s '
+                          'root_visible=%s mount_visible=%s anchor_chassis=%s axis_scales=%s mount_position=%s',
+                          FRAME_DIAGNOSTIC_REVISION, self.diagnostic_frames, owned._key, owned._enabled,
+                          owned._actual_enabled, owned._detached, getattr(owned, '_started', None), owned._root.visible, owned._mount.visible,
+                          tuple(relative), tuple(scales), mount_position)
+            except Exception:
+                _log.exception('Light frame diagnostic failed for %s', owned._key)
+
+    def stop(self, key):
+        self.active.discard(key)
+        if not self.active and self.callback is not None:
+            callback, self.callback = self.callback, None
+            BigWorld.cancelCallback(callback)
+
+    def __del__(self):
+        if self.callback is not None:
+            try:
+                BigWorld.cancelCallback(self.callback)
+            except Exception:
+                pass
+
+
+class _OwnedSequence(object):
+    def __init__(self, native, group, key, root, node, mount):
+        self._native = native
+        self._group = group
+        self._key = key
+        self._root = root
+        self._node = node
+        self._mount = mount
+        self._enabled = False
+        self._actual_enabled = False
+        self._detached = False
+        self._started = False
+        group.members.append(weakref.ref(self))
+
+    def __getattr__(self, name):
+        return getattr(self._native, name)
+
+    def setEnabled(self, enabled):
+        self._enabled = bool(enabled)
+        self._group.sync_visibility()
+
+    def start(self):
+        if self._detached:
+            self._node.attach(self._mount)
+            self._detached = False
+        self._native.start()
+        self._started = True
+        self._group.start(self._key)
+
+    def stop(self):
+        self._group.stop(self._key)
+        try:
+            self._native.stop()
+        finally:
+            self._started = False
+            if not self._detached:
+                self._detached = True
+                try:
+                    self._node.detach(self._mount)
+                except Exception:
+                    _log.exception('Could not detach VFX root %s', self._key)
+            self._group.sync_visibility()
+
+
+def init():
+    global _installed
+    if _installed:
+        return
+    _check_matrix_api()
+    try:
+        _install_visibility_hooks()
+    except Exception:
+        _log.exception('Visibility hook unavailable; per-frame color-pass guard remains active')
+    original_prereqs = camouflages.getModelAnimatorsPrereqs
+    original_animators = camouflages.getModelAnimators
+
+    def prerequisites(outfit, spaceId):
+        result = original_prereqs(outfit, spaceId)
+        # Avoid preloading vehicle-only textures for other vehicle types when the
+        # outfit exposes its native vehicle compact descriptor.
+        try:
+            from items import vehicles
+            compact = getattr(outfit, 'vehicleCD', None)
+            if compact and '__VEHICLE_TYPE__' not in vehicles.getVehicleType(compact).name:
+                return result
+        except Exception:
+            pass
+        try:
+            additions = [AnimationSequence.Loader(config['sequence'], spaceId) for config in RIGS]
+            result.extend(additions)
+        except Exception:
+            _log.exception('Could not prepare optional independent VFX resources')
+        return result
+
+    def animators(outfit, vehicleDescr, spaceId, loadedAnimators, compoundModel):
+        result = original_animators(outfit, vehicleDescr, spaceId, loadedAnimators, compoundModel)
+        try:
+            # During appearance construction, the entity may still refer to
+            # the old/empty appearance. Resolve ownership again each frame.
+            if '__VEHICLE_TYPE__' not in getattr(getattr(vehicleDescr, 'type', None), 'name', ''):
+                return result
+        except Exception:
+            _log.exception('Could not identify local CustomVehicle')
+            return result
+        try:
+            group = _WarpGroup(compoundModel, vehicleDescr)
+        except Exception:
+            _log.exception('Could not create optional independent VFX group')
+            return result
+        attached = 0
+        for config in RIGS:
+            native = root = node = mount = None
+            try:
+                path = config['sequence']
+                if path in loadedAnimators.failedIDs:
+                    _log.error('Independent model sequence failed to load: %s', path)
+                    continue
+                if 'other_anchor' in config:
+                    raise ValueError('Two-node wheel correction is not supported by this maker')
+                node, anchorName = _resolve_node(compoundModel, config)
+                if node is None:
+                    _log.error('Missing VFX attachment node %s (%s)', config['anchor'], config['id'])
+                    continue
+                if config['part'] == 'gun':
+                    # GUN_INCLINATION must be the driver; a part alias here would
+                    # silently pin the barrel lamps again.
+                    _log.info('Barrel VFX %s follows gun inclination node %s (client %s)',
+                              config['id'], anchorName, _GUN_INCLINATION)
+                transform = Math.Matrix()
+                transform.setIdentity()
+                mount = newFakeModel()
+                mount.visible = False
+                node.attach(mount)
+                root = mount
+                wrapper = AnimationSequence.ModelWrapperContainer(root, spaceId)
+                native = loadedAnimators.pop(path)
+                native.bindTo(wrapper)
+                native.speed = 1.0
+                native.loopCount = 1000000
+                native.setEnabled(False)
+                owned = _OwnedSequence(native, group, config['id'], root, node, mount)
+                result.append(camouflages.LoadedModelAnimator(owned, node, None))
+                attached += 1
+                _log.info('Attached independent VFX %s to %s', config['id'], anchorName)
+            except Exception:
+                if native is not None:
+                    try:
+                        native.stop()
+                    except Exception:
+                        pass
+                if mount is not None and node is not None:
+                    try:
+                        node.detach(mount)
+                    except Exception:
+                        pass
+                _log.exception('Independent VFX attachment failed for %s', config['id'])
+        _log.info('Independent model setup: %d/%d models; native shader timing from native materials/sequences',
+                  attached, len(RIGS))
+        return result
+
+    camouflages.getModelAnimatorsPrereqs = prerequisites
+    camouflages.getModelAnimators = animators
+    _installed = True
+    _log.info('Selected-light maker loaded (%d lights, gun inclination node %s, animationMode=2 Pulse, g_tint driven by native colour keys, '
+              'isolated wheel frames, scope visibility guard)', len(RIGS), _GUN_INCLINATION)
+    if FRAME_DIAGNOSTICS_ENABLED:
+        _log.info('Light frame diagnostic revision: %s; observations at active frames 1, 30, 120 only',
+                  FRAME_DIAGNOSTIC_REVISION)
+
+
+init()
+
