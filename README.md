@@ -6,6 +6,8 @@
 
 Version 3.9 adds a scope choice for ordinary skins: all vehicles sharing the same resources (default), or only your vehicle. It applies to texture builds, 3D painting and conversion of existing ordinary skins, and is retained in drafts. Own-vehicle mode uses private resource paths and excludes UML, third-party scripts and shared-resource override packages. This controls local rendering only. In-game behavior remains untested; the garage flicker diagnostic is separate.
 
+另有独立实验工具 [本地涂装屏蔽 1.0](standalone/local_skin_filter/README.md)：从实际选择的 Wargaming 客户端提取独立原版资源，在游戏内按敌车／队友及车型选择原版外观，保留自己的涂装。它处理原版路径替换，不保证移除 UML／AE／第三方脚本独立挂载物；需另装 ModsSettings API 及 ModsList API。所有生成包均待游戏内实测，尚未获得官方审核，不能保证反作弊零误报；本次没有发布远程 Release，也不包含旧 AE 闪烁修复。
+
 ## English
 
 WOT Camouflage Workbench is a Windows desktop toolkit for creating World of Tanks camouflage, models, lighting and animated effects. Version 3.8 adds a persistent thumbnail library for your own image elements, with batch import, search, categories and direct reuse in 3D painting. It includes GIF/video import, 36 AE presets, animated previews, bilateral controls and optional classic or glass-style interface themes.
