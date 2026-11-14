@@ -18,7 +18,7 @@ def widgets(parent):
 
 class Unified31Tests(unittest.TestCase):
     def test_all_editor_headers_share_the_product_brand_and_font(self):
-        self.assertEqual(__version__,'3.8')
+        self.assertEqual(__version__,'3.9')
         styles=[]
         for cls in (Workbench,LightMaker,AEImporter):
             app=cls()

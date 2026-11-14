@@ -120,9 +120,13 @@ def _validate_layer(project,body,payload):
 
 def build(project, client, body, payload, output_dir, title):
     """Compose saved layers in order, then encode each affected texture once."""
+    from . import vehicle_scope
     if engine.digest(project['source'])!=project['source_sha256'] or body.get('source_sha256')!=project['source_sha256']:
         raise ValueError('输入包或预览已改变，请重新打开三维贴图。')
     if not isinstance(payload,dict):raise ValueError('贴图参数无效。')
+    scope=vehicle_scope.validate(payload.get('scope','all'))
+    if scope=='self' and project.get('base_vehicle'):
+        raise ValueError('仅自己的车辆模式暂不支持 UML 模型配置，请使用所有同资源车辆模式。')
     layers=payload.get('layers',[payload])
     if not isinstance(layers,list) or not 1<=len(layers)<=MAX_LAYERS:
         raise ValueError('一次可保存 1～32 张图片。')
@@ -195,6 +199,13 @@ def build(project, client, body, payload, output_dir, title):
             written=after.getinfo(entry.filename)
             if (entry.CRC,entry.file_size)!=(written.CRC,written.file_size):raise ValueError('非目标资源发生变化。')
     for item in changed.values():dds.verify_matches(item['data'],item['raw'])
+    scope_info=dict(value='all')
+    if scope=='self':
+        scoped=target.with_suffix('.wotmod.scoped')
+        scope_info=vehicle_scope.archive(staged,scoped,client,project['nation']+'/'+project['vehicle'],scope)
+        # Only replace our new intermediate after the complete private graph
+        # and final ZIP have been read back. The user's input is never moved.
+        scoped.replace(staged)
     root=engine.resolve_client_root(client)
     version=ET.parse(root/'version.xml').getroot()
     report=dict(artifact=dict(path=str(target),sha256=engine.digest(staged),bytes=staged.stat().st_size),
@@ -205,7 +216,8 @@ def build(project, client, body, payload, output_dir, title):
         image_sha256=hashlib.sha256(edits[0]['raw_image']).hexdigest(),position=[edits[0]['u'],edits[0]['v']],scale=edits[0]['scale'],angle=edits[0]['angle'],
         layers=[dict(mesh=e['mesh'],texture=e['texture'],position=[e['u'],e['v']],scale=e['scale'],angle=e['angle'],image_sha256=hashlib.sha256(e['raw_image']).hexdigest()) for e in edits],
         textures=[dict(path=e['texture'],format=dds.inspect(e['raw']).format_name,source_sha256=hashlib.sha256(e['raw']).hexdigest(),sha256=hashlib.sha256(e['data']).hexdigest()) for e in changed.values()],
-        file_validation=dict(status='passed',zip_crc=True,zip_stored=True,dds_structure='passed',other_entries_unchanged=True),
+        application_scope=scope_info,
+        file_validation=dict(status='passed',zip_crc=True,zip_stored=True,dds_structure='passed',other_entries_unchanged=scope=='all'),
         offline_validation=dict(status='partial',groups_checked=groups,preexisting_group_issues=group_issues,vehicle_dependency_check='not_tested',game_shader_execution='not_tested'),
         in_game_tested=False,whole_vehicle_loading=dict(status='not_tested'),
         limitations=['预览为近似渲染；同一贴图共享 UV 的其他位置也会受影响。','只覆盖本次编辑的 AM 贴图；其他 LOD、外观、mip 和压缩效果需检查。','游戏内整车加载与实际视觉效果未实测。'])

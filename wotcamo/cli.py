@@ -26,6 +26,7 @@ def main():
     b.add_argument("--recipe")
     b.add_argument("--derive", action="store_true")
     b.add_argument("--pack", action="store_true")
+    b.add_argument('--scope',choices=('all','self'),default='all',help='涂装应用范围：all 所有同资源车辆；self 仅自己的车辆')
     b.add_argument("--install", action="store_true")
     b.add_argument("--no-install", action="store_true", help="默认就不安装；保留交接文档参数兼容")
     for name in ("verify", "install", "rollback", "pack"):
@@ -60,7 +61,7 @@ def main():
         elif a.command == "build":
             if a.install and a.no_install:
                 raise ValueError("--install 和 --no-install 不能同时指定")
-            out = pipeline.build(a.tank, a.materials, a.prompt, a.title, cfg, a.out, a.derive, a.pack, a.recipe)
+            out = pipeline.build(a.tank, a.materials, a.prompt, a.title, cfg, a.out, a.derive, a.pack, a.recipe,scope=a.scope)
             pipeline.verify(out, cfg)
             if a.install:
                 modpack.install(out, cfg["wot_root"])

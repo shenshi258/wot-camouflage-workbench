@@ -164,6 +164,11 @@ def apply_textures(project, texture_output, cfg=None, log=print):
         raise ValueError("请选择与当前模型同车型、同版本的涂装产物")
     from .pipeline import verify
     verify(texture_output, cfg, log)
+    if report.get('application_scope', {}).get('value') == 'self':
+        # Blender previews use editable original paths, not the private game
+        # appearance graph or its selector script.
+        files = [(row['path'], safe_join(Path(texture_output)/'source_res',row['path']).read_bytes())
+                 for row in report['source_files']]
     for rel, data in files:
         dest = safe_join(project / "paint/res", rel)
         dest.parent.mkdir(parents=True, exist_ok=True)

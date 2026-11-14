@@ -4,6 +4,7 @@ from xml.sax.saxutils import escape
 import hashlib
 import uuid
 import zipfile
+import re
 from .common import ROOT, read_json, write_json, safe_join, atomic_write, settings
 from .wotdata import game_version
 
@@ -41,7 +42,18 @@ def checked_files(output):
         data = safe_join(output / "res", rel).read_bytes()
         if digest(data) != sha:
             raise ValueError(f"文件内容发生变化：{rel}")
-        if not rel.startswith("vehicles/"):
+        scope = report.get('application_scope', {})
+        own = scope.get('value') == 'self'
+        if own:
+            namespace = scope.get('namespace', '')
+            runtime = scope.get('runtime', '')
+            if not re.fullmatch(r'vehicles/wot_workbench/[0-9a-f]{16}/', namespace) or not re.fullmatch(r'scripts/client/gui/mods/mod_wot_scope_[0-9a-f]{16}\.pyc', runtime):
+                raise ValueError('仅自己模式的资源清单无效。')
+            if not rel.startswith(namespace) and rel != runtime:
+                raise ValueError('仅自己模式包含全局资源覆盖，禁止安装。')
+            if rel == runtime and data[:4] != b'\x03\xf3\r\n':
+                raise ValueError('仅自己模式的脚本格式无效。')
+        elif not rel.startswith("vehicles/"):
             raise ValueError("只允许安装 vehicles/ 下的涂装和模型")
         values.append((rel, data))
     return report, values

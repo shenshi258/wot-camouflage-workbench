@@ -32,6 +32,7 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 <button id="paintSave" title="固定当前图片的位置，继续添加下一张；Ctrl+S。关闭前请生成涂装包。">保存当前贴图（Ctrl+S）</button><span id="paintCount">已保存 0 张</span>
 <button id="paintUndo" disabled>撤销上一张</button><button id="paintClear">清除当前图片</button>
 <label>成品包名称 <input id="paintName" type="text" maxlength="100" placeholder="填写成品名称" style="width:160px;background:#203149;color:#e3eaf4;border:1px solid #3a506c;border-radius:6px;padding:6px"></label>
+<label title="仅影响本机显示。所有同资源车辆包含引用同一模型的敌我车辆；仅自己的车辆使用独立资源，游戏内效果待实测。">应用范围 <select id="paintScope"><option value="all">所有同资源车辆</option><option value="self">仅自己的车辆</option></select></label>
 <button id="paintExport">生成涂装包</button>
 <span id="paintStatus">点击模型并导入图片，顺序不限；共用 UV 的位置会同步变化。</span>
 </div>

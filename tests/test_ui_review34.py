@@ -10,6 +10,46 @@ from wotcamo.gui import Workbench
 
 
 class UIReview34Tests(unittest.TestCase):
+    def test_skin_scope_control_defaults_global_and_has_help(self):
+        from wotcamo import vehicle_scope
+        app=Workbench();self.addCleanup(app.destroy)
+        self.assertEqual(app.application_scope(),'all')
+        self.assertEqual(list(app.scope_combo.cget('values')),list(vehicle_scope.LABELS.values()))
+        self.assertEqual(str(app.scope_combo.cget('state')),'readonly')
+        self.assertIn(app.scope_combo,app.hover_help.providers)
+        app.skin_scope.set(vehicle_scope.LABELS['self'])
+        self.assertEqual(app.application_scope(),'self')
+        for glass in (False,True):
+            with patch.object(ui_theme,'theme_preference',return_value=glass):ui_theme.configure_theme(app)
+            app.geometry('1040x750');app.deiconify();app.select_page(0);app.update()
+            self.assertTrue(app.scope_combo.winfo_ismapped())
+            self.assertLess(app.scope_combo.winfo_rootx()+app.scope_combo.winfo_width(),app.winfo_rootx()+app.winfo_width())
+
+    def test_skin_scope_is_passed_to_build(self):
+        from wotcamo import vehicle_scope
+        app=Workbench();self.addCleanup(app.destroy)
+        app.skin_scope.set(vehicle_scope.LABELS['self'])
+        with patch.object(app,'task',side_effect=lambda work,done:work()), \
+             patch('wotcamo.gui.pipeline.build',return_value='fixture-output') as build, \
+             patch('wotcamo.gui.pipeline.verify'):
+            app.build()
+        self.assertEqual(build.call_args.kwargs['scope'],'self')
+
+    def test_skin_scope_roundtrips_draft_and_old_draft_defaults_global(self):
+        from wotcamo import vehicle_scope
+        app=Workbench();self.addCleanup(app.destroy)
+        app.skin_scope.set(vehicle_scope.LABELS['self'])
+        with patch('wotcamo.autosave.save_draft',return_value='fixture') as save:
+            app.autosave_tick()
+        draft=save.call_args.args[0]
+        self.assertEqual(draft['scope'],'self')
+        with patch('wotcamo.gui.filedialog.askopenfilename',return_value='fixture.json'), \
+             patch('wotcamo.autosave.load_draft',return_value=draft):
+            app.skin_scope.set(vehicle_scope.LABELS['all']);app.restore_draft()
+            self.assertEqual(app.application_scope(),'self')
+            draft.pop('scope');app.restore_draft()
+            self.assertEqual(app.application_scope(),'all')
+
     def test_new_preview_actions_have_help_and_remain_inside_compact_window(self):
         from PIL import Image
         from wotcamo.ae_media_gui import ClipPreview

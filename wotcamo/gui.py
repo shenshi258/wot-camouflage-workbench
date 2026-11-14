@@ -36,6 +36,8 @@ class Workbench(tk.Tk):
         self.paint_sessions = []
         self._paint_after = None
         self.auto_save = tk.BooleanVar(value=autosave.enabled('texture'))
+        from . import vehicle_scope
+        self.skin_scope = tk.StringVar(value=vehicle_scope.LABELS['all'])
         self.output = tk.StringVar()
         self.project = tk.StringVar()
         # Keep the navigation labels in fixed-size controls. Selection changes
@@ -162,7 +164,7 @@ class Workbench(tk.Tk):
             if self.auto_save.get():
                 data = dict(tank=self.tank.get(), query=self.query.get(), title=self.title_var.get(),
                             materials=self.materials.get(), prompt=self.prompt.get('1.0', 'end-1c'),
-                            derive=self.derive.get(), do_pack=self.do_pack.get())
+                            derive=self.derive.get(), do_pack=self.do_pack.get(), scope=self.application_scope())
                 path = autosave.save_draft(data)
                 self.log('涂装草稿已自动保存：' + str(path))
         except Exception as e: self.log('涂装草稿自动保存失败：' + str(e))
@@ -176,9 +178,12 @@ class Workbench(tk.Tk):
             d = autosave.load_draft(path)
             if not all(isinstance(d.get(k), str) for k in ('tank','query','title','materials','prompt')) or not all(type(d.get(k)) is bool for k in ('derive','do_pack')):
                 raise ValueError('草稿字段不完整。')
+            from . import vehicle_scope
+            scope=vehicle_scope.validate(d.get('scope','all'))
             self.query.set(d['query']); self.tank.set(d['tank']); self.title_var.set(d['title']); self.materials.set(d['materials'])
             self.prompt.delete('1.0', 'end'); self.prompt.insert('1.0', d['prompt'])
             self.derive.set(d['derive']); self.do_pack.set(d['do_pack']); self.refresh_models()
+            self.skin_scope.set(vehicle_scope.LABELS[scope])
             self.log('已恢复涂装草稿：' + path)
         except (OSError, ValueError, TypeError) as e: messagebox.showerror('恢复失败', str(e), parent=self)
 
@@ -192,6 +197,7 @@ class Workbench(tk.Tk):
             if tank not in wotdata.load_index(self.cfg)['vehicles']:
                 raise ValueError('请先重建索引并选择车型。')
             title=title_name(self.title_var.get())
+            scope=self.application_scope()
         except (OSError,ValueError,KeyError) as error:
             messagebox.showerror('无法打开三维贴图',str(error),parent=self);return
         package=None
@@ -204,7 +210,7 @@ class Workbench(tk.Tk):
             cache=ROOT/'.cache';cache.mkdir(exist_ok=True)
             folder=Path(tempfile.mkdtemp(prefix='paint3d_',dir=cache))
             project=paint3d.project_from_package(tank,package) if package else paint3d.create_stock_project(tank,folder)
-            return preview3d.Session(project,client,paint={'title':title})
+            return preview3d.Session(project,client,paint={'title':title,'scope':scope})
         def opened(session):
             self.paint_sessions.append(session)
             self.log('三维贴图窗口已打开：点击模型并导入图片，顺序不限。')
@@ -339,6 +345,12 @@ class Workbench(tk.Tk):
         ttk.Label(left, text='作品名称', style='Field.TLabel').pack(anchor='w')
         self.title_var = tk.StringVar(value='沙漠之冠')
         self.hint(ttk.Entry(left, textvariable=self.title_var), '作品名称').pack(fill='x', pady=(3, 5))
+        scope_row=ttk.Frame(left,style='Card.TFrame');scope_row.pack(fill='x',pady=(1,5))
+        ttk.Label(scope_row,text='应用范围',style='Field.TLabel').pack(side='left')
+        from . import vehicle_scope
+        self.scope_combo=ttk.Combobox(scope_row,textvariable=self.skin_scope,
+            values=list(vehicle_scope.LABELS.values()),state='readonly',width=20)
+        self.hint(self.scope_combo,'涂装应用范围').pack(side='left',fill='x',expand=True,padx=(10,0))
         ttk.Label(left, text='素材文件夹', style='Field.TLabel').pack(anchor='w')
         row = ttk.Frame(left, style='Card.TFrame'); row.pack(fill='x', pady=(3, 5))
         self.materials = tk.StringVar(value=str(ROOT / 'materials/demo'))
@@ -380,6 +392,7 @@ class Workbench(tk.Tk):
         paint_actions=ttk.Frame(right,style='Card.TFrame');paint_actions.pack(fill='x')
         self.button(paint_actions,'打开原版模型',lambda:self.open_paint_preview(False),True).pack(side='left')
         self.button(paint_actions,'打开已有涂装',lambda:self.open_paint_preview(True)).pack(side='left',padx=(7,0))
+        self.button(right,'按当前范围导出已有涂装',self.export_skin_scope).pack(anchor='w',pady=(9,0))
         self.button(right,'管理图片素材库',self.open_asset_library).pack(anchor='w',pady=(9,0))
         ttk.Separator(right,orient='horizontal').pack(fill='x',pady=12)
         atlas_head=ttk.Frame(right,style='Card.TFrame');atlas_head.pack(fill='x')
@@ -390,11 +403,37 @@ class Workbench(tk.Tk):
         self.hint(self.preview_label, '贴图预览'); self.preview_label.pack(fill='both', expand=True, pady=8)
         self.button(right, '打开产物文件夹', lambda: self.open_folder(self.output.get())).pack(anchor='w')
 
+    def application_scope(self):
+        from . import vehicle_scope
+        return next((key for key,label in vehicle_scope.LABELS.items() if label==self.skin_scope.get()),'all')
+
+    def export_skin_scope(self):
+        if self.busy:return
+        from . import paint3d,vehicle_scope
+        try:
+            client=str(vehicle_scope.engine.resolve_client_root(self.cfg.get('wot_root','')))
+            tank=self.tank.get()
+            if tank not in wotdata.load_index(self.cfg)['vehicles']:raise ValueError('请先选择索引中的车型。')
+            scope=self.application_scope();name=title_name(self.title_var.get())
+        except (OSError,ValueError,KeyError) as error:
+            messagebox.showerror('无法导出',str(error),parent=self);return
+        source=filedialog.askopenfilename(title='选择当前车型的普通涂装包',filetypes=[('WOT 涂装包','*.wotmod')])
+        if not source:return
+        def run():
+            paint3d.project_from_package(tank,source)
+            return vehicle_scope.export_existing(source,ROOT/'result/应用范围',client,tank,scope,name)
+        def done(result):
+            target,report=result
+            self.log('应用范围待测包已生成：'+str(target))
+            self.open_folder(str(target.parent))
+        self.task(run,done)
+
     def build(self, recipe_file=None):
         tank, mat, text, title = self.tank.get(), self.materials.get(), self.prompt.get("1.0", "end").strip(), self.title_var.get()
         derive, pack = self.derive.get(), self.do_pack.get()
+        scope=self.application_scope()
         def run():
-            out = pipeline.build(tank, mat, text, title, self.cfg, derive_maps=derive, do_pack=pack, recipe_file=recipe_file, log=self.worker_log)
+            out = pipeline.build(tank, mat, text, title, self.cfg, derive_maps=derive, do_pack=pack, recipe_file=recipe_file, log=self.worker_log,scope=scope)
             pipeline.verify(out, self.cfg, self.worker_log)
             return out
         self.task(run, self.show_output)

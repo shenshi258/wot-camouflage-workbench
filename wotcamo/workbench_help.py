@@ -23,5 +23,9 @@ TEXT.update({
 
 TEXT['管理图片素材库']='批量导入自己的 PNG、JPG 或 WebP，按缩略图、名称和分类管理；不用先选择车型或客户端。副本保存在程序内的素材库文件夹，三维贴图中可点选使用。升级时保留该文件夹。'
 
+from .vehicle_scope import HELP as _SCOPE_HELP
+TEXT['涂装应用范围']=_SCOPE_HELP
+TEXT['按当前范围导出已有涂装']='按左侧“应用范围”转换当前车型的已有普通涂装包，不用重新贴图。生成新待测包，保留输入；仅自己模式暂不支持 UML、第三方脚本或共享资源覆盖包。测试时停用同款旧包。'
+
 def topic(name):
     return Help(name, TEXT[name])

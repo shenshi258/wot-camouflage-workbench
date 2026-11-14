@@ -34,7 +34,9 @@ def preview(tiles, output, title):
     sheet.save(output)
 
 
-def build(tank, material_dir, text, title, cfg=None, out=None, derive_maps=False, do_pack=False, recipe_file=None, log=print):
+def build(tank, material_dir, text, title, cfg=None, out=None, derive_maps=False, do_pack=False, recipe_file=None, log=print, scope='all'):
+    from . import vehicle_scope
+    scope = vehicle_scope.validate(scope)
     cfg = cfg or settings()
     index = load_index(cfg)
     if tank not in index["vehicles"]:
@@ -98,6 +100,12 @@ def build(tank, material_dir, text, title, cfg=None, out=None, derive_maps=False
                 tiles.append((Path(rel).name, image.copy()))
     if not report["files"]:
         raise ValueError("没有实际改变的贴图，未生成安装产物")
+    report['application_scope'] = dict(value=scope)
+    if scope == 'self':
+        report['source_files'] = report['files']
+        report['application_scope'] = vehicle_scope.folder(output, cfg['wot_root'], tank)
+        report['files'] = [dict(path=p.relative_to(output/'res').as_posix(), sha256=digest(p.read_bytes()), bytes=p.stat().st_size)
+                           for p in sorted((output/'res').rglob('*')) if p.is_file()]
     preview(tiles, output / "preview.png", title)
     report["complete"] = True
     report["count"] = len(report["files"])
@@ -119,8 +127,20 @@ def verify(output, cfg=None, log=print):
         raise ValueError("产物对应的客户端版本已变化")
     entries = index["vehicles"][report["tank"]]
     mip_count = 0
+    texture_values = values
+    if report.get('application_scope', {}).get('value') == 'self':
+        texture_values = []
+        sources = report['application_scope']['resource_sources']
+        for row in report['source_files']:
+            raw = safe_join(Path(output)/'source_res', row['path']).read_bytes()
+            if digest(raw) != row['sha256']:
+                raise ValueError('仅自己模式的原始涂装副本已改变。')
+            private = next((p for p, source in sources.items() if source == row['path']), None)
+            if not private or safe_join(Path(output)/'res', private).read_bytes() != raw:
+                raise ValueError('仅自己模式的贴图副本与制作结果不一致。')
+            texture_values.append((row['path'], raw))
     with Assets(cfg["wot_root"]) as assets:
-        for rel, data in values:
+        for rel, data in texture_values:
             if not rel.lower().endswith(".dds"):
                 continue
             if rel not in entries:

@@ -1,0 +1,79 @@
+# -*- coding: utf-8 -*-
+"""Select private cosmetic model resources for one appearance, never shared descriptors."""
+import logging
+import BigWorld
+from vehicle_systems import model_assembler
+from vehicle_appearance.common_tank_appearance import CommonTankAppearance
+from vehicle_systems.CompoundAppearance import CompoundAppearance
+from gui.hangar_vehicle_appearance import HangarVehicleAppearance
+
+MODEL_PATHS = {}
+_contexts = []
+_installed = False
+_log = logging.getLogger('WotWorkbench.VehicleScope')
+
+
+def _own_vehicle(vehicle_id):
+    try:
+        player = BigWorld.player()
+        own_id = getattr(player, 'playerVehicleID', None)
+        return own_id is not None and own_id == vehicle_id
+    except Exception:
+        return False
+
+
+def _with_context(original, identify):
+    def guarded(appearance, *args, **kwargs):
+        _contexts.append(identify(appearance, args, kwargs))
+        try:
+            return original(appearance, *args, **kwargs)
+        finally:
+            _contexts.pop()
+    return guarded
+
+
+def init():
+    global _installed
+    if _installed:
+        return
+    original_paths = model_assembler.getPartModelsFromDesc
+    original_prereqs = CommonTankAppearance.prerequisites
+    refresh_name = '_CompoundAppearance__requestModelsRefresh'
+    original_refresh = getattr(CompoundAppearance, refresh_name)
+    hangar_name = '_HangarVehicleAppearance__startBuild'
+    original_hangar = getattr(HangarVehicleAppearance, hangar_name)
+
+    def part_models(*args, **kwargs):
+        models = original_paths(*args, **kwargs)
+        if not _contexts or not _contexts[-1]:
+            return models
+        mapped = [MODEL_PATHS.get(path.replace('\\', '/').lower(), path)
+                  if isinstance(path, basestring) else path for path in models]
+        if list(models) == mapped:
+            return models
+        # Keep the native named tuple type and its chassis/hull/turret/gun API.
+        if hasattr(models, '_fields'):
+            return type(models)(*mapped)
+        return tuple(mapped) if isinstance(models, tuple) else mapped
+
+    def prereq_owner(appearance, args, kwargs):
+        return _own_vehicle(args[0] if args else kwargs.get('vID'))
+
+    def refresh_owner(appearance, args, kwargs):
+        return _own_vehicle(getattr(appearance, '_CommonTankAppearance__vID', None))
+
+    model_assembler.getPartModelsFromDesc = part_models
+    CommonTankAppearance.prerequisites = _with_context(original_prereqs, prereq_owner)
+    setattr(CompoundAppearance, refresh_name, _with_context(original_refresh, refresh_owner))
+    # A hangar build is explicitly scoped; absence of a battle player is not
+    # itself permission to redirect arbitrary previews or unrelated loaders.
+    setattr(HangarVehicleAppearance, hangar_name,
+            _with_context(original_hangar, lambda appearance, args, kwargs: True))
+    _installed = True
+    _log.info('Own-vehicle cosmetic scope loaded: %d private model paths', len(MODEL_PATHS))
+
+
+try:
+    init()
+except Exception:
+    _log.exception('Own-vehicle cosmetic scope unavailable; keep original models')

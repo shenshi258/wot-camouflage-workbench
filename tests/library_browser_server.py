@@ -1,5 +1,5 @@
 """Disposable image library and synthetic model for a real browser check."""
-import base64,json,subprocess,sys,time
+import base64,json,subprocess,sys,time,shutil,zipfile
 from pathlib import Path
 from PIL import Image,ImageDraw
 ROOT=Path(__file__).resolve().parents[1];sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
@@ -8,10 +8,20 @@ from wotcamo import preview3d
 
 fixture=Paint3DTests();fixture.setUp();sessions=[]
 try:
+    own_scope='--scope' in sys.argv
+    if own_scope:
+        # Synthetic client assets plus the installed client's compiler DLL.
+        # This validates an actual private export without launching the game.
+        from wotcamo import light_effects as engine
+        base=fixture.visual[4:-17]
+        with zipfile.ZipFile(fixture.source,'a') as z:z.writestr('res/'+base+'.model','<root><nodefullVisual>'+base+'</nodefullVisual></root>')
+        fixture.project['source_sha256']=engine.digest(fixture.source)
+        (fixture.client/'win64').mkdir()
+        shutil.copy2('E:/wot cn/World_of_Tanks_CN/win64/python27.dll',fixture.client/'win64/python27.dll')
     preview3d.ROOT=fixture.root
     library_root=fixture.root/'library'
     library=preview3d.Session(None,None,launch=False,library_only=True,library_root=library_root);sessions.append(library)
-    paint=preview3d.Session(fixture.project,str(fixture.client),launch=False,paint={'title':'素材库验证'},library_root=library_root);sessions.append(paint)
+    paint=preview3d.Session(fixture.project,str(fixture.client),launch=False,paint={'title':'素材库验证','scope':'self' if own_scope else 'all'},library_root=library_root);sessions.append(paint)
     paint.worker=subprocess.Popen([sys.executable,'-B','-m','wotcamo.preview3d_assets',str(paint.folder)],cwd=ROOT,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=0x08000000)
     files=[]
     specs=[('橙色警示',(255,140,40)),('冰蓝十字',(120,220,255)),('粉色流线',(255,100,170)),('紫色六角',(175,130,255)),('青色线条',(60,220,180)),('金色边框',(255,220,100)),('白色标记',(240,245,255)),('蓝色几何',(80,140,255))]

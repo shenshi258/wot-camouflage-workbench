@@ -494,7 +494,7 @@ async function poll(){
  if(fatal)return;
  try{
   const status=await json('status');window.applyWorkbenchTheme?.(status.uiTheme);picked=status.state.picked||[];
-  if(paintMode&&!poll.paintNameReady){$('paintName').value=status.paintTitle||'我的涂装';poll.paintNameReady=true;}
+  if(paintMode&&!poll.paintNameReady){$('paintName').value=status.paintTitle||'我的涂装';$('paintScope').value=status.paintScope==='self'?'self':'all';poll.paintNameReady=true;}
   if(status.closed){if(window.pywebview?.api)window.pywebview.api.close();return;}
   if(status.state.performance&&status.state.performance!==poll.lastPerformance){
    poll.lastPerformance=status.state.performance;$('quality').value=status.state.performance;stats.scale=1;resize();
@@ -633,12 +633,12 @@ function setupPaint(){
   if(!layers.length){$('paintStatus').textContent='请先选择图片并点击模型放置。';return;}
   if(layers.length>32){$('paintStatus').textContent='最多导出 32 张图片，请先清除当前图片或撤销上一张。';return;}
   const btn=$('paintExport');btn.disabled=true;$('paintStatus').textContent='正在生成并检查贴图，请稍候…';
-  paintBusy=true;for(const id of ['paintSave','paintUndo','paintClear','paintFile','paintScale','paintAngle'])$(id).disabled=true;
+  paintBusy=true;for(const id of ['paintSave','paintUndo','paintClear','paintFile','paintScale','paintAngle','paintScope'])$(id).disabled=true;
   paintLibrary.updateButtons();
-  try{const response=await post('paint',{title:$('paintName').value,layers:layers.map(paintPayload)});
+  try{const response=await post('paint',{title:$('paintName').value,scope:$('paintScope').value,layers:layers.map(paintPayload)});
    const data=await response.json();if(!response.ok)throw Error(data.error||'生成失败');
    $('paintStatus').textContent='待测包已生成：'+data.path;
-  }catch(e){$('paintStatus').textContent='生成失败：'+String(e.message||e);}finally{paintBusy=false;btn.disabled=false;for(const id of ['paintSave','paintClear','paintFile','paintScale','paintAngle'])$(id).disabled=false;paintCounter();paintLibrary.updateButtons();}
+  }catch(e){$('paintStatus').textContent='生成失败：'+String(e.message||e);}finally{paintBusy=false;btn.disabled=false;for(const id of ['paintSave','paintClear','paintFile','paintScale','paintAngle','paintScope'])$(id).disabled=false;paintCounter();paintLibrary.updateButtons();}
  };
 }
 

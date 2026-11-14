@@ -6,7 +6,7 @@ const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 let server,browser,info,send,ws;
 async function until(fn,timeout=30000){const deadline=Date.now()+timeout;while(Date.now()<deadline){const result=await fn();if(result)return result;await delay(100);}throw Error('Browser check timed out');}
 async function start(){
- server=cp.spawn(python,['-B',path.join(__dirname,'library_browser_server.py')],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe']});
+ server=cp.spawn(python,['-B',path.join(__dirname,'library_browser_server.py'),...(process.argv.includes('--scope')?['--scope']:[])],{cwd:root,windowsHide:true,stdio:['ignore','pipe','pipe']});
  let output='',stderr='';server.stdout.on('data',chunk=>output+=chunk);server.stderr.on('data',chunk=>stderr+=chunk);
  await until(()=>{if(server.exitCode!==null)throw Error(stderr);return output.includes('LIBRARY_BROWSER_READY');});
  info=JSON.parse(fs.readFileSync(path.join(root,'.cache/library38_browser_ready.json'),'utf8'));
@@ -66,6 +66,7 @@ async function reviewLibrary(){
   if(process.argv.includes('--review'))await reviewLibrary();
   await send('Page.navigate',{url:info.paint_url});
   await until(()=>evaluate('!!window.previewTest&&window.previewTest.report().ready'),45000);
+  if(process.argv.includes('--scope'))assert.strictEqual(await evaluate("document.getElementById('paintScope').value"),'self');
   await evaluate("document.getElementById('paintLibrary').click()");await until(()=>evaluate("document.querySelectorAll('#libraryPanel [data-asset-id]').length===8"));
   await evaluate(`document.querySelector('#libraryPanel [data-asset-id="${selected}"]').click();document.querySelector('#libraryPanel [data-lib="use"]').click();`);
   await until(()=>evaluate('window.previewTest.paintState().loaded'));
@@ -78,6 +79,14 @@ async function reviewLibrary(){
   await until(()=>evaluate('window.previewTest.paintState().preview'));
   await evaluate("document.getElementById('paintSave').click();document.getElementById('paintName').value='图库素材验证';document.getElementById('paintExport').click()");
   await until(()=>evaluate("document.getElementById('paintStatus').textContent.startsWith('待测包已生成')"));
+  if(process.argv.includes('--scope')){
+   const exported=await evaluate("document.getElementById('paintStatus').textContent.slice('待测包已生成：'.length)");
+   const record=JSON.parse(fs.readFileSync(path.join(path.dirname(exported),'验证记录.json'),'utf8'));
+   assert.strictEqual(record.application_scope.value,'self');
+   assert(Object.keys(record.application_scope.model_paths).length>0);
+   assert.strictEqual(record.whole_vehicle_loading.status,'not_tested');
+   console.log('PAINT_SCOPE_EXPORT_AND_PERSISTED_SELECTION_OK');
+  }
   const result=await evaluate('({paint:window.previewTest.paintState(),errors:window.previewTest.report().errors})');
   assert.strictEqual(result.paint.saved,1);assert.deepStrictEqual(result.errors,[]);
   fs.writeFileSync(path.join(root,'.cache/library38_browser_result.json'),JSON.stringify({scope:'Synthetic media and model only; no actual game execution.',whole_vehicle_loading:{status:'not_tested'},imported:8,duplicate:1,rejected:1,persisted:true,edited:true,recycleUndo:true,selectedAndExported:true,result},null,2));

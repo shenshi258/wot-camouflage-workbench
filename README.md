@@ -1,6 +1,10 @@
-# WOT 涂装工作台 3.8 R1 / WOT Camouflage Workbench
+# WOT 涂装工作台 3.9 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
+
+3.9 增加普通涂装的“应用范围”：所有同资源车辆（默认）或仅自己的车辆。基础涂装、三维贴图和已有普通涂装转换均支持，范围随草稿保存。仅控制本机显示；仅自己模式生成独立资源路径，暂不支持 UML、第三方脚本或共享覆盖包。游戏内效果待实测，本次不包含车库闪烁修复。
+
+Version 3.9 adds a scope choice for ordinary skins: all vehicles sharing the same resources (default), or only your vehicle. It applies to texture builds, 3D painting and conversion of existing ordinary skins, and is retained in drafts. Own-vehicle mode uses private resource paths and excludes UML, third-party scripts and shared-resource override packages. This controls local rendering only. In-game behavior remains untested; the garage flicker diagnostic is separate.
 
 ## English
 

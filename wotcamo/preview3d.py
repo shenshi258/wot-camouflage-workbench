@@ -197,7 +197,8 @@ class Session:
         body=self.read_json('body.json');ready=self.read_json('ready.json');error=self.read_json('error.json')
         return dict(uiTheme=ui_theme.theme_preference(),body=body['scene'] if body else None,ready=ready['scene'] if ready else None,
                     readyRevision=ready['revision'] if ready else -1,state=state,
-                    closed=self.closed,paintTitle=self.paint.get('title','') if self.paint else None,effect=self.effect,
+                    closed=self.closed,paintTitle=self.paint.get('title','') if self.paint else None,
+                    paintScope=self.paint.get('scope','all') if self.paint else None,effect=self.effect,
                     error=error if error and (error['revision']==-1 or error['revision']>=state['revision']) else None,
                     progress=self.read_json('progress.json') or dict(message='正在读取整车资源…'))
 
