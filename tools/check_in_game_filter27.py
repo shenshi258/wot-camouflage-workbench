@@ -47,8 +47,12 @@ world=Obj();world.player=lambda:player;world.callback=lambda *args:1;world.cance
 rm=Obj();rm.isFile=lambda name:os.path.isfile(c.absolute(name));rm.purge=lambda p:None
 notices=[];ctl=runtime.Controller(api,world,rm,notify=notices.append,localize=lambda key:u'\u6d4b\u8bd5\u8f66\u578b'.encode('utf-8'));ctl.catalog=c
 ctl.refresh_main();ctl.register_cars()
-assert len(ctl.ui_rows)==len(c.cars)
-assert any(u'\u6d4b\u8bd5\u8f66\u578b'in row['label']for row in ctl.ui_rows)
+assert len(ctl.ui_rows)==len(c.overridden) and all(row['key']in c.overridden for row in ctl.ui_rows)
+assert next(row['label']for row in ctl.ui_rows if row['key']=='german/g72_jagdpz_e100')=='Jg.Pz. E 100'
+assert next(row['label']for row in ctl.ui_rows if row['key']=='czech/cz40_dbv_152')=='DBV-152'
+fallback=Obj();fallback.cars=[dict(key='german/test_fallback',nation='german',code='Test_fallback',label='Fallback',localization='#test:fallback')];fallback.overridden=set(['german/test_fallback'])
+ctl.catalog=fallback;ctl.register_cars();assert u'\u6d4b\u8bd5\u8f66\u578b'in ctl.ui_rows[0]['label'];ctl.catalog=c;ctl.register_cars()
+
 ctl.on_global(runtime.LINK,{'enabled':False});ctl.refresh_main();ctl.progress='different status';ctl.refresh_main()
 assert ctl.enabled is False
 ctl.on_global(runtime.LINK,{'enabled':True});ctl.publish(record['vehicle'],record);assert record['vehicle']in ctl.ready
@@ -85,16 +89,16 @@ gen.R.mods.local_skin_filter.views=Obj();gen.R.mods.local_skin_filter.views.Sele
 mod('gui.impl.pub');mod('gui.impl.pub.view_impl').ViewImpl=View;mod('gui.impl.pub.window_impl').WindowImpl=Window
 ctl.open_selector();assert ctl.panel is not None and len(windows)==1
 assert windows[-1].content.settings.layout==60001 and windows[-1].flags==7
-snapshot=json.loads(ctl.panel.view.viewModel.values[0]);assert len(snapshot['cars'])==len(c.cars)
+snapshot=json.loads(ctl.panel.view.viewModel.values[0]);assert len(snapshot['cars'])==len(c.overridden)
 ctl.open_selector();assert len(windows)==1
 html=open(HTMLFILE,'rb').read();html_sha256=hashlib.sha256(html).hexdigest()
 ctl.panel.command({'payload':json.dumps({'ticket':1731666666666,'command':{'kind':'all_enemies'}})})
-ctl.busy=True;ctl.poll();assert all(ctl.rules[row['key']]==1 for row in c.cars)
+ctl.busy=True;ctl.poll();assert all(ctl.rules[row['key']]==1 for row in ctl.ui_rows)
 assert json.loads(ctl.panel.view.viewModel.values[0])['appliedTicket']==1731666666666
 count=ctl.events.qsize();ctl.panel.command({'payload':'{}'});ctl.panel.command({'payload':json.dumps({'ticket':1731666666666,'command':{}})})
 assert ctl.events.qsize()==count
 ctl.panel.close();assert windows[-1].destroyed and ctl.panel.window is None
-ctl.open_selector();assert len(windows)==2 and len(json.loads(ctl.panel.view.viewModel.values[0])['cars'])==len(c.cars)
+ctl.open_selector();assert len(windows)==2 and len(json.loads(ctl.panel.view.viewModel.values[0])['cars'])==len(c.overridden)
 ctl.panel.stop();ctl.panel=None
 Parts=collections.namedtuple('Parts','chassis hull turret gun')
 class Names(object):ALL=('chassis','hull','turret','gun')
@@ -166,7 +170,7 @@ os.getcwd=original_getcwd
 assert runtime._controller.catalog.realm==c.realm and not runtime._controller.ready
 assert len(menu)==1 and menu[0]['lobby']is True and menu[0]['login']is False
 before=len(windows);menu[0]['callback']();assert len(windows)==before+1 and runtime._controller.panel.view is not None
-assert len(json.loads(runtime._controller.panel.view.viewModel.values[0])['cars'])==len(c.cars)
+assert len(json.loads(runtime._controller.panel.view.viewModel.values[0])['cars'])==len(c.overridden)
 runtime.fini();assert runtime._controller.stopped
 result=dict(status='passed',realm=c.realm,version=c.version,vehicle_count=len(c.cars),cache_resources=len(record['resources']),
  model_paths=len(record['models']),cycles=100,modes=4,states=3,entry_pyc_executed=True,

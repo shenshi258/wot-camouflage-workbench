@@ -8,7 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'game_mods/local_skin_filter'
-VERSION='2.1.3'
+VERSION='2.1.5'
 
 
 def digest(path):
@@ -71,7 +71,7 @@ def main():
     # These builds share verified appearance interfaces. The plugin reads each
     # client's own native resources and own vehicle list, not another realm's files.
     assert [x['sha256']for x in records[0]['appearance_api']]==[x['sha256']for x in records[1]['appearance_api']]
-    modules=('__init__','catalog','packed_xml','runtime','gameface')
+    modules=('__init__','catalog','packed_xml','runtime','gameface','vehicle_names')
     candidates=[]
     with tempfile.TemporaryDirectory(dir=ROOT/'.cache',prefix='filter20_compile_')as folder:
         work=Path(folder)

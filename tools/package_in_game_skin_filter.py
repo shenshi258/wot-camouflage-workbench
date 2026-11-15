@@ -3,7 +3,7 @@ import argparse,hashlib,json,math,shutil,sys,zipfile
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'game_mods/local_skin_filter'
-VERSION='2.1.3'
+VERSION='2.1.5'
 
 
 def digest(path):
@@ -65,11 +65,20 @@ def main():
         delivered=mods/candidate.name;shutil.copy2(candidate,delivered);assert digest(delivered)==digest(candidate)
         shutil.copy2(SOURCE/'安装说明.txt',folder/'安装说明.txt')
         shutil.copy2(SOURCE/'WOT_TOOLKIT_LICENSE.txt',folder/'WOT_TOOLKIT_LICENSE.txt')
+        (folder/'tools').mkdir()
+        shutil.copy2(SOURCE/'optimize_cache.ps1',folder/'tools/OptimizeSkinFilterCache.ps1')
+        shutil.copy2(SOURCE/'optimize_cache.cmd',folder/'优化缓存占用.cmd')
         record['artifact']['path']=str(delivered.resolve())
-        record['offline_validation']=dict(status='passed',behavior_tests=38,native_pyc=native,browser_interactions=browser,
+        record['offline_validation']=dict(status='passed',behavior_tests=50,native_pyc=native,browser_interactions=browser,
           cache_xml_semantic_readback=xml,cache_binary_byte_identical=binaries,mesh_groups_checked=groups,
           preexisting_mesh_readback_issues=preexisting,new_mesh_issues=[],
           ui_rendering='not_tested',native_shader_execution='not_tested',dynamic_resource_mount='not_tested')
+        matrix=json.loads(Path(record['target_matrix_evidence']).read_text('utf-8'))
+        assert matrix['artifact_sha256']==digest(candidate)and matrix['resource_readback']=='passed'and matrix['realm']==realm
+        record['offline_validation']['target_filter_matrix']=matrix
+        record['vehicle_names']=json.loads((SOURCE/'vehicle_names_source.json').read_text('utf-8'))
+        record['storage_utility']=dict(method='NTFS hardlinks outside game',resource_bytes_changed=False,
+          sha256=digest(folder/'tools/OptimizeSkinFilterCache.ps1'),requires_game_closed=True)
         record['dependencies']=dict(ModsSettings_API='1.7.1 found in reference client',ModsList_API='1.8.0 found in reference client',bundled=False)
         record['whole_vehicle_loading']=dict(status='not_tested');record['in_game_tested']=False
         (folder/'验证记录.json').write_text(json.dumps(record,ensure_ascii=False,indent=2),encoding='utf-8')
@@ -90,18 +99,25 @@ def main():
     with zipfile.ZipFile(source_zip,'x',zipfile.ZIP_DEFLATED)as z:
         for file in SOURCE.rglob('*'):
             if file.is_file()and'__pycache__'not in file.parts:z.write(file,'game_mods/local_skin_filter/'+file.relative_to(SOURCE).as_posix())
-        for name in('build_in_game_skin_filter.py','check_in_game_filter27.py','package_in_game_skin_filter.py','check_selector_browser.py'):
+        for name in('build_in_game_skin_filter.py','check_in_game_filter27.py','package_in_game_skin_filter.py','check_selector_browser.py','check_filter_target_matrix27.py'):
             z.write(ROOT/'tools'/name,'tools/'+name)
     with zipfile.ZipFile(source_zip)as z:assert z.testzip()is None
     report=a.delivery/('本地涂装屏蔽_'+VERSION+'_双区检查记录.md')
     rows='\n'.join('| {realm} | {version} | {vehicles} | {mesh_groups} | {old_group_issues} |'.format(**row)for row in results)
-    report.write_text('''# 本地涂装屏蔽 2.1.3 · 读取加速修订
+    report.write_text('''# 本地涂装屏蔽 2.1.5 · 选车界面、高清缓存与占用优化
 
-2.1.2 在本机欧服实测停留“正在读取车型列表”。本次日志确认 SelectorView 缺少 viewModel 属性，加载回调因此终止；这不是持续等待读盘能恢复的问题。已补上与原生视图一致的 getViewModel 属性封装，并将 UI 替身改为真实的基类接口形式，防止测试替身再次掩盖该错误。旧版 UI 验收 failed，未报告闪退；整车状态保持 not_tested。
+选车界面只显示已检测到玩家自制模型／涂装覆盖的车型；当前两区参考目录各 80 款。按车库原生车型定义读取国家／系别、I–XI 等级和轻坦／中坦／重坦／坦歼／自行火炮类别。筛选与搜索、拖框叠加，隐藏的旧规则保留。底部固定大字金色“应用改动”按钮，先显示将要应用的数量和范围，保存后明确提示。
+车名统一为本机亚服中文客户端的车库短名称，共提取 1002 款，覆盖当前全部 80 款有自定义覆盖的车。亚服原生保留的名称如 Jg.Pz. E 100、DBV-152 仍保持原样；小字编号与“百突”等搜索词可检索。未覆盖的新车型回退客户端名称。
+安装包附“优化缓存占用.cmd”，退出游戏后独立运行，将本插件清单内 SHA256 和大小均相同的文件改为 NTFS 硬链接共享；修改前后校验内容，原路径、完整模型和 SD／HD 贴图保留，不减少分辨率。工具不装入游戏脚本，也不处理原 .pkg、涂装包或其他缓存。逻辑文件大小仍会包含各路径，实际释放空间以报告的 released_file_bytes 为准。未完成、越界和校验异常的资源跳过，旧代缓存仍保留。
 
-2.1.3 增加车型元数据缓存。客户端版本、路径、原版包或已安装涂装变化后自动失效；损坏或无法写入缓存时退回正常读取。缓存命中时不打开原版 ZIP，不建立 50 多万条原版资源索引；仅在后台准备实际选中的涂装资源时按需建立完整索引，保留原有资源与准备回读要求。
-界面只渲染可视区域附近的行，选择仍覆盖完整筛选结果；滚出屏幕的行保留选择。相同数据不重复解析和重建列表。已有搜索、国家筛选、Ctrl 追加、Shift 连选、全部敌车和每车敌我范围保留。日、波、瑞、意四国键按客户端实际资源目录核对。
-原生 Gameface 资源与 ViewModel 不使用 CEF，不启动 HTTP 服务，不改浏览器白名单。原有规则和原版缓存可继续使用。UML／AE 独立挂载和共享全局覆盖仍需适配。
+用户反馈：战斗中的敌方百突仍显示自定义涂装，DBV 152 屏蔽后看起来像低模。实际欧服 2.4.1.1 #993，已安装 2.1.3 文件 SHA256 为 05000be1d24b530ba1bd0e9f7308266973cfa90905f9e61af41a06bf39f09bca；保存的 1027 款规则均为仅敌车，开关已启用，两车均有完成的缓存。旧版功能和视觉反馈失败，整车验收仍未完成。
+确认旧缓存遗漏了引擎隐式加载的 _hd.dds 高清 mip 文件，实际日志出现私有缓存的 _hd.dds 缺失。两车旧缓存的 104／96 个网格均与原版逐字节一致，各级 LOD 都保留，未发现把原版网格简化的修改；不能仅凭观感把贴图降级等同于几何低模。
+百突所有 21 个被覆盖的模型路径均包含在原版映射中。其缓存生成时间 19:56 晚于本次游戏启动 19:52；动态挂载未完成是待核实的可能原因，旧版没有记录具体运行分支，不能据此认定唯一根因。
+
+2.1.5 同目录保存 SD／HD mip 配对，缺少高清配对的旧格式不再复用。恢复已有缓存优先于全选后的新资源复制；文件已生成但引擎尚不可读时显示“需重启游戏”，准备失败与“游戏可读”分开。记录资源发布和每车每范围的替换／未发布／未知路径决策，日志不记录账号、玩家 ID 或网址。原有范围与自己的车辆保护保留。
+两区分别对百突默认／两套原生 3D 风格和 DBV 152 默认／原生 3D 风格检查四种范围、自身／敌方／队友、三种损毁状态和包内 LOD 路径：每区 900 组，含首次选择和刷新入口。所有已安装原版目录覆盖车型再做默认外观范围矩阵，每区 80 款／2880 组。使用实际原生路径选择函数和引擎／外观替身，属于离线逻辑验证。
+每区百突补齐 66 组高清配对，466 项资源、104 个模型、228 个网格分组；DBV 152 补齐 62 组，431 项资源、96 个模型、172 个网格分组。逐项回读：网格和贴图与本区原版逐字节相同，模型／材质／LOD 描述还原引用后语义相同，无新增分组问题。仅资源引用按客户端原生大小写归一索引核对，其他材质字段与数值保持原版语义。
+百突实际战斗中的未生效分支仍待新版日志与观察确认。新包 whole_vehicle_loading.status = not_tested，不能将以上检查当作游戏修复或兼容通过。
 
 ## 逐区离线证据
 
@@ -111,10 +127,10 @@ def main():
 
 两区最终 MOD 文件相同，SHA256 见逐区验证记录与下方清单。
 行为测试通过，具体数量见测试记录。另分别用两区实际 Python 2.7 DLL 运行最终包内模块和入口、读取本区原版文件，生成隔离测试缓存；测试过程没有向安装目录写入或启动游戏。
-最终包内页面在独立 Chromium 中完成 16 项交互检查：搜索、空结果、国家筛选、鼠标拖框、Ctrl 追加、批量队友设置、全选结果、跨筛选保留选择、全部敌车、自动滚动、800×600 布局、ViewModel 指令分支与关闭指令，以及虚拟列表节点上限、相同数据保留节点和跨屏选择保留。页面哈希与两区包内嵌入内容相同。截图保存在浏览器检查目录。
+最终包内页面在独立 Chromium 中完成 21 项交互检查：搜索及百突别名、空结果、无覆盖车型隐藏、国家／系别＋等级＋类别组合筛选、鼠标拖框、Ctrl 追加、批量队友设置、全选结果、跨筛选保留选择、全部敌车、自动滚动、800×600 至 3840×2160 七种分辨率布局及列对齐、ViewModel 指令分支与关闭指令，以及虚拟列表节点上限、相同数据保留节点和跨屏选择保留。页面哈希与两区包内嵌入内容相同。截图保存在浏览器检查目录。
 两区原生 WULF 接口已核对；最终包声明独立 Gameface 界面，数据通过 ViewModel 传递。接口替身覆盖打开、重复打开、命令、关闭、重新打开和退出；不创建 HTTP 服务，不导航 CEF，不修改白名单。Gameface 实际显示仍待游戏实测。
 每区执行 100 × 4 范围 × 3 损毁状态循环，使用实际原生可视路径选择函数与引擎/UI 替身；检查自身保留、敌我独立规则、重启保存、UTF-8 标签、不同默认/风格模型、刷新、命名元组类型、原描述与碰撞入口不变。
-Pz70 每区读取 167 项资源／42 个模型。所有模型 XML 还原路径后逐节点比对原版，数字按原始浮点精度核对；所有非 XML 资源逐字节一致。所有可读网格分组回读，三项原版损毁车体提示复制前后相同，无新增问题；没有将既有提示确认为游戏故障。
+Pz70 每区读取 197 项资源／42 个模型。所有模型 XML 还原路径后逐节点比对原版，数字按原始浮点精度核对；所有非 XML 资源逐字节一致。所有可读网格分组回读，三项原版损毁车体提示复制前后相同，无新增问题；没有将既有提示确认为游戏故障。
 
 ## 运行环境中的隔离计时
 

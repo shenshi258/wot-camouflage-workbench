@@ -16,6 +16,7 @@ PREFIX = 'vehicles/_lsf2/'
 NATIONS = {'german':'germany','french':'france','american':'usa','british':'uk',
            'russian':'ussr','chinese':'china','japan':'japan','czech':'czech',
            'poland':'poland','sweden':'sweden','italy':'italy'}
+KINDS=('lightTank','mediumTank','heavyTank','AT-SPG','SPG')
 
 
 class Paused(Exception):
@@ -86,7 +87,7 @@ class Catalog(object):
     def __init__(self,root):
         self.root=os.path.realpath(root);self.index={};self.packages=[];self.archives={};self.cars=[];self.mod_roots=[]
         self.overridden=set();self.override_warnings=[]
-        self.index_loaded=False;self.metadata_cache_hit=False
+        self.index_loaded=False;self.metadata_cache_hit=False;self.cached_vehicles=set()
         version_raw=self._file('version.xml');paths_raw=self._file('paths.xml')
         version=parse(version_raw);self.version=(version.findtext('version')or'').strip()
         self.realm=(version.findtext('meta/realm')or'').strip()
@@ -111,7 +112,7 @@ class Catalog(object):
                 self.resmods=os.path.realpath(os.path.join(self.root,*name.split('/')))
         if not self.packages or not self.resmods or not within(self.root,self.resmods):
             raise ValueError('Native package or active res_mods path not found')
-        self.fingerprint=sha(b'lsf2-cache-format-2-preserve-cr\n'+version_raw+paths_raw+json.dumps(stamps,sort_keys=True).encode('utf-8'))
+        self.fingerprint=sha(b'lsf2-cache-format-3-sd-hd-pairs\n'+version_raw+paths_raw+json.dumps(stamps,sort_keys=True).encode('utf-8'))
         self.cache_rel=PREFIX+self.fingerprint[:12]+'/'
         self.cache_root=self.absolute(self.cache_rel)
 
@@ -149,11 +150,11 @@ class Catalog(object):
 
     def _metadata(self,folder,signature,save=False):
         """Cache small vehicle metadata; native model bytes are never trusted here."""
-        target=os.path.join(os.path.realpath(folder),'catalog2_'+self.fingerprint+'_'+signature+'.json')
+        target=os.path.join(os.path.realpath(folder),'catalog3_'+self.fingerprint+'_'+signature+'.json')
         if save:
             payload=dict(cars=self.cars,overridden=sorted(self.overridden),warnings=self.override_warnings)
             text=json.dumps(payload,ensure_ascii=True,sort_keys=True,separators=(',',':'))
-            data=dict(schema=2,fingerprint=self.fingerprint,overrides=signature,payload=text,sha256=sha(text.encode('ascii')))
+            data=dict(schema=3,fingerprint=self.fingerprint,overrides=signature,payload=text,sha256=sha(text.encode('ascii')))
             if not os.path.isdir(folder):os.makedirs(folder)
             temporary=target+'.'+uuid.uuid4().hex+'.tmp'
             try:
@@ -165,7 +166,7 @@ class Catalog(object):
             return True
         if not os.path.isfile(target)or os.path.getsize(target)>5*1024*1024:return False
         with io.open(target,encoding='ascii')as f:data=json.load(f)
-        if data.get('schema')!=2 or data.get('fingerprint')!=self.fingerprint or data.get('overrides')!=signature:return False
+        if data.get('schema')!=3 or data.get('fingerprint')!=self.fingerprint or data.get('overrides')!=signature:return False
         text=data['payload']
         if sha(text.encode('ascii'))!=data['sha256']:return False
         payload=json.loads(text);cars=payload['cars'];known=set()
@@ -176,6 +177,8 @@ class Catalog(object):
             if not isinstance(car['label'],(str,type(u'')))or len(car['label'])>250:return False
             localization=car.get('localization')
             if localization is not None and(not isinstance(localization,(str,type(u'')))or len(localization)>250):return False
+            if isinstance(car.get('level'),bool)or not isinstance(car.get('level'),int)or not 0<=car['level']<=11:return False
+            if car.get('kind')not in KINDS+('',):return False
             known.add(key)
         affected=payload['overridden'];warnings=payload['warnings']
         if not isinstance(affected,list)or not set(affected).issubset(known):return False
@@ -189,13 +192,26 @@ class Catalog(object):
         if cache_dir:
             try:
                 signature=self._override_stamp()
-                if self._metadata(cache_dir,signature):return self
+                if self._metadata(cache_dir,signature):self._discover_cached();return self
             except (IOError,OSError,ValueError,KeyError,TypeError,AttributeError):pass
         self.ensure_index();self.scan_overrides()
         if cache_dir and signature:
             try:self._metadata(cache_dir,signature,save=True)
             except (IOError,OSError,ValueError,TypeError):pass
-        return self
+        self._discover_cached();return self
+
+    def _discover_cached(self):
+        # Scheduling hint only. Every candidate is still fully validated by the
+        # worker before publication; a marker never establishes engine readiness.
+        self.cached_vehicles=set()
+        if not os.path.isdir(self.cache_root):return
+        names={sha(row['key'].encode('utf-8'))[:12]:row['key']for row in self.cars}
+        for name in os.listdir(self.cache_root):
+            if name not in names:continue
+            folder=os.path.join(self.cache_root,name)
+            if not os.path.isdir(folder):continue
+            if any(re.match(r'^[a-f0-9]{12}$',g)and os.path.isfile(os.path.join(folder,g,'ready.json'))for g in os.listdir(folder)):
+                self.cached_vehicles.add(names[name])
 
     def ensure_index(self,cancel=lambda:False):
         # Warm startup needs only the small metadata snapshot. The full native
@@ -214,7 +230,7 @@ class Catalog(object):
                     if key not in self.index:self.index[key]=(source,info.filename,info.CRC,info.file_size)
                     if key.startswith('vehicles/')and '/normal/lod0/'in key and key.endswith('.model'):
                         parts=name.split('/');ident='/'.join(parts[1:3]).lower()
-                        found[ident]=dict(key=ident,nation=parts[1].lower(),code=parts[2],label=parts[2].replace('_',' '),localization=None)
+                        found[ident]=dict(key=ident,nation=parts[1].lower(),code=parts[2],label=parts[2].replace('_',' '),localization=None,level=0,kind='')
         self.index_loaded=True
         # Localization is read from native vehicle lists, never from mod scripts.
         for nation,definition in NATIONS.items():
@@ -222,7 +238,12 @@ class Catalog(object):
             if name.lower()not in self.index:continue
             for node in parse(self.read(name)):
                 ident=nation+'/'+node.tag.lower()
-                if ident in found:found[ident]['localization']=node.findtext('shortUserString')or node.findtext('userString')
+                if ident in found:
+                    row=found[ident];row['localization']=node.findtext('shortUserString')or node.findtext('userString')
+                    try:row['level']=max(0,min(11,int(node.findtext('level')or 0)))
+                    except ValueError:row['level']=0
+                    tags=set((node.findtext('tags')or'').split())
+                    row['kind']=next((tag for tag in KINDS if tag in tags),'')
         self.cars=sorted(found.values(),key=lambda row:row['key'])
 
     def scan_overrides(self):
@@ -280,6 +301,12 @@ class Catalog(object):
             if key in resources:return
             if not key.endswith(ALLOWED):raise ValueError('Unsupported dependency: '+name)
             resources[key]=self.index[key][1]
+            # The engine resolves HD mip companions implicitly. They are not
+            # referenced by the visual XML, but must keep the same basename and
+            # directory as the SD texture in the isolated namespace.
+            if key.endswith('.dds')and not key.endswith('_hd.dds'):
+                companion=key[:-4]+'_hd.dds'
+                if companion in self.index:add(companion,owner)
             if key.endswith(XML):queue.append(key)
             if len(resources)>10000:raise ValueError('Resource graph too large')
         roots=[name for key,(_,name,_,_)in self.index.items()if key.startswith(prefix)and key.endswith('.model')]
@@ -348,7 +375,7 @@ class Catalog(object):
             rows.append(dict(source=name,source_sha256=source_hash,source_crc=self.index[key][2],destination=destination,sha256=sha(data),bytes=len(data)))
             if number%20==0:progress('%s: %d/%d'%(vehicle,number+1,len(spec['resources'])))
         if cancel():raise Paused()
-        result=dict(schema=2,fingerprint=self.fingerprint,vehicle=vehicle,base=base,resources=rows,
+        result=dict(schema=3,fingerprint=self.fingerprint,vehicle=vehicle,base=base,resources=rows,
                     shaders=spec['shaders'],models={key:value for key,value in mapping.items()if key.endswith('.model')},
                     whole_vehicle_loading=dict(status='not_tested'),in_game_tested=False)
         # The readiness marker is written LAST; partial caches are never selected.
@@ -370,7 +397,7 @@ class Catalog(object):
             if not os.path.isfile(marker)or os.path.getsize(marker)>16*1024*1024:continue
             try:
                 with io.open(marker,encoding='utf-8')as f:record=json.load(f)
-                if record['fingerprint']!=self.fingerprint or record['vehicle']!=vehicle or record['schema']!=2:continue
+                if record['fingerprint']!=self.fingerprint or record['vehicle']!=vehicle or record['schema']!=3:continue
                 expected=base+generation+'/'
                 if record['base']!=expected or not record['resources']or len(record['resources'])>10000:continue
                 models={}
@@ -385,6 +412,11 @@ class Catalog(object):
                         if sha(f.read())!=row['sha256']:raise ValueError('Cache resource hash changed')
                     if key.endswith('.model'):models[key]=destination
                 if models!=record['models']or not models:continue
+                listed=set(row['source'].lower()for row in record['resources'])
+                for source in listed:
+                    companion=source[:-4]+'_hd.dds'
+                    if source.endswith('.dds')and not source.endswith('_hd.dds')and companion in self.index and companion not in listed:
+                        raise ValueError('Cache HD companion omitted')
                 return record
             except (ValueError,IOError,OSError,KeyError,TypeError):continue
         return None

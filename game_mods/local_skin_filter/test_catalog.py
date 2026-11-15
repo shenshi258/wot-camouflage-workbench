@@ -57,7 +57,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_corrupt_metadata_is_rebuilt_and_readonly_cache_does_not_block_startup(self):
         folder=self.root/'metadata';first=Catalog(str(self.root)).scan(cache_dir=str(folder));first.close()
-        next(folder.glob('catalog2_*.json')).write_text('{invalid json')
+        next(folder.glob('catalog3_*.json')).write_text('{invalid json')
         rebuilt=Catalog(str(self.root)).scan(cache_dir=str(folder));self.addCleanup(rebuilt.close)
         self.assertFalse(rebuilt.metadata_cache_hit);self.assertEqual(rebuilt.cars,self.catalog.cars)
         with patch.object(Catalog,'_metadata',side_effect=OSError('cache directory unavailable')):
@@ -69,6 +69,30 @@ class CatalogTests(unittest.TestCase):
         warm=Catalog(str(self.root)).scan(cache_dir=str(folder));self.addCleanup(warm.close)
         with self.assertRaises(Paused):warm.ensure_index(cancel=lambda:True)
         self.assertFalse(warm.index_loaded);self.assertEqual(warm.cars,self.catalog.cars)
+
+    def test_implicit_hd_mips_are_copied_adjacent_and_required_when_loading_cache(self):
+        self.catalog.close();self.files['vehicles/common/base_hd.dds']=b'native HD mips';self.pkg()
+        c=Catalog(str(self.root)).scan();self.addCleanup(c.close)
+        record=c.prepare('german/g197_test');self.assertEqual(record['schema'],3)
+        rows={v['source']:v for v in record['resources']}
+        sd=rows['vehicles/common/base.dds']['destination'];hd=rows['vehicles/common/base_hd.dds']['destination']
+        self.assertEqual(hd,sd[:-4]+'_hd.dds');self.assertEqual(Path(c.absolute(hd)).read_bytes(),b'native HD mips')
+        self.assertIsNotNone(c.load_ready('german/g197_test'))
+        record['resources']=[v for v in record['resources']if v['source']!='vehicles/common/base_hd.dds']
+        Path(c.absolute(record['base']+'ready.json')).write_text(json.dumps(record))
+        self.assertIsNone(c.load_ready('german/g197_test'))
+
+    def test_tier_and_class_are_read_from_native_garage_list_tags(self):
+        self.catalog.close()
+        self.files['scripts/item_defs/vehicles/germany/list.xml']=b'<root><G197_Test><level>10</level><tags>AT-SPG heavyAT-SPG HD</tags><shortUserString>#vehicles:test</shortUserString></G197_Test></root>'
+        self.pkg();c=Catalog(str(self.root)).scan();self.addCleanup(c.close)
+        self.assertEqual(c.cars[0]['level'],10);self.assertEqual(c.cars[0]['kind'],'AT-SPG')
+
+    def test_prebuilt_markers_are_only_scheduling_hints_and_still_require_validation(self):
+        record=self.catalog.prepare('german/g197_test');self.catalog._discover_cached()
+        self.assertIn('german/g197_test',self.catalog.cached_vehicles)
+        Path(self.catalog.absolute(record['resources'][0]['destination'])).write_bytes(b'damaged')
+        self.assertIsNone(self.catalog.load_ready('german/g197_test'))
 
     def test_eu_asia_each_detect_own_client_without_hardcoded_install_path(self):
         self.assertEqual(self.catalog.realm,'EU');self.assertEqual(len(self.catalog.cars),1)

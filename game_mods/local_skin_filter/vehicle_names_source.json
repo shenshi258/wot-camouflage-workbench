@@ -1,0 +1,91 @@
+{
+  "realm": "ASIA",
+  "version": "v.2.4.1.1 #991",
+  "format": "garage short names, fallback to full display names",
+  "vehicle_count": 1029,
+  "translated_names": 1002,
+  "sources": {
+    "usa_vehicles": {
+      "path": "res/text/lc_messages/usa_vehicles.mo",
+      "sha256": "a43c87204c4900dbe78cff8f8b93dec20d08cb1757595262e935f7317efbe44d"
+    },
+    "maps_training": {
+      "path": "res/text/lc_messages/maps_training.mo",
+      "sha256": "b13ea1a5a514fbd6f80ecd5b333f41394959b3c69abc5509bf5c1b7b2bdecd81"
+    },
+    "gb_vehicles": {
+      "path": "res/text/lc_messages/gb_vehicles.mo",
+      "sha256": "6041e3bdfca6480e6a38b5de5a30ab4a7cffd3ade51909aceb002ae0ad82a4e4"
+    },
+    "china_vehicles": {
+      "path": "res/text/lc_messages/china_vehicles.mo",
+      "sha256": "7da16c6b8f61d527e88c6dbc36b220845c4a6a6edae76badc4e2a033832deb8b"
+    },
+    "czech_vehicles": {
+      "path": "res/text/lc_messages/czech_vehicles.mo",
+      "sha256": "286e96e5c5ca4e995903f8bc6bb343e9fa290ba889e70dbc5919ae7b11cd244e"
+    },
+    "france_vehicles": {
+      "path": "res/text/lc_messages/france_vehicles.mo",
+      "sha256": "5ba8bc5b91c52010e905d8b0f9244f6c8f25d84099a14129485046ba34b0b454"
+    },
+    "germany_vehicles": {
+      "path": "res/text/lc_messages/germany_vehicles.mo",
+      "sha256": "bc00e72bbe50ad36a28ac7fbe70d7c6cdef37f50a1c1c9eb68192f58127bf205"
+    },
+    "story_mode.sm_battle": {
+      "path": "res/text/lc_messages/story_mode.sm_battle.mo",
+      "sha256": "6a178f4a67e6d19d42cdcba0d91f94842e07fc194e6191a07ce3f5675cc5ac14"
+    },
+    "italy_vehicles": {
+      "path": "res/text/lc_messages/italy_vehicles.mo",
+      "sha256": "46b2360bc96e72b2529fd008a17cd4533d0f22f6dd986ce43e6b414e573faea8"
+    },
+    "japan_vehicles": {
+      "path": "res/text/lc_messages/japan_vehicles.mo",
+      "sha256": "b04e31cd0d8229fdc8ff4a11139c05660e0b816cb4a207e0fdc688e699195f9d"
+    },
+    "poland_vehicles": {
+      "path": "res/text/lc_messages/poland_vehicles.mo",
+      "sha256": "e2a45b0bea24a908fc1698ceea2eec6b7ffa223a7df49d5f9b79db31f37e5576"
+    },
+    "ussr_vehicles": {
+      "path": "res/text/lc_messages/ussr_vehicles.mo",
+      "sha256": "d9b1ff800bb651c3fc88b2c4d60e1f4993612ee4ed4bf7fa3f176acd5755c0f2"
+    },
+    "sweden_vehicles": {
+      "path": "res/text/lc_messages/sweden_vehicles.mo",
+      "sha256": "48834a7b32f04f3915dd25266d8c59559698ff1003a94ddccefdd796939c0dd7"
+    }
+  },
+  "missing": [
+    "american/a17_m37",
+    "american/a21_t14",
+    "american/a29_t40",
+    "american/a33_mtls-1g14",
+    "american/a45_m6a2e1",
+    "american/a58_t67",
+    "american/a71_t21",
+    "american/a86_t23e3",
+    "american/a92_m60",
+    "german/g32_pzv_pziv_alpha",
+    "german/g51_lowe",
+    "russian/r00_placeholder",
+    "russian/r09_t-26",
+    "russian/r10_at-1",
+    "russian/r14_su-5",
+    "russian/r16_su-18",
+    "russian/r22_t-46",
+    "russian/r34_bt-sv",
+    "russian/r43_t70",
+    "russian/r46_kv-13",
+    "russian/r54_kv-5",
+    "russian/r56_t-127",
+    "russian/r61_object252",
+    "russian/r66_su-26",
+    "russian/r68_a-32",
+    "russian/r71_is_2_berlin",
+    "russian/r86_ltp"
+  ],
+  "descriptions_included": false
+}

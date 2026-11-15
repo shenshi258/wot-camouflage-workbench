@@ -12,6 +12,7 @@ try:
 except ImportError:
     import queue
 from .catalog import Catalog,Paused,NATIONS,find_root,sha
+from .vehicle_names import NAMES
 
 LOG=logging.getLogger('LocalSkinFilter2')
 LINK='local_skin_filter2'
@@ -19,6 +20,8 @@ MODES=[u'不屏蔽',u'仅敌车',u'仅队友',u'敌车和队友']
 NATION_LABELS={'german':u'德国','french':u'法国','american':u'美国','british':u'英国',
  'russian':u'苏联','chinese':u'中国','japan':u'日本','czech':u'捷克',
  'poland':u'波兰','sweden':u'瑞典','italy':u'意大利'}
+KIND_LABELS={'lightTank':u'轻坦 LT','mediumTank':u'中坦 MT','heavyTank':u'重坦 HT',
+ 'AT-SPG':u'坦歼 TD','SPG':u'火炮 SPG','':u'其他'}
 _controller=None
 _installed=False
 _contexts=[]
@@ -26,6 +29,10 @@ _contexts=[]
 
 def catalog_metadata_dir(root):
     return os.path.join(root,'mods','configs','local_skin_filter','catalog')
+
+
+def vehicle_label(key):
+    return NAMES.get(key,key.split('/')[-1].replace('_',' '))
 
 
 def variable(key):
@@ -79,6 +86,7 @@ class Controller(object):
         self.attempted=set();self.callbacks={};self.progress=u'正在读取本区客户端车型…';self.job_id=None
         self.panel_factory=panel_factory;self.panel=None;self.ui_rows=[];self.revision=0;self.panel_signature=None
         self.last_ticket=0;self.command_message='';self.command_error=''
+        self.restart_required=set();self.failed=set();self.decisions=set()
 
     def in_battle(self):
         try:return getattr(self.world.player(),'arena',None)is not None
@@ -95,7 +103,8 @@ class Controller(object):
 
     def main_template(self):
         ready=sum(1 for key,mode in self.rules.items()if mode and key in self.ready)
-        selected=sum(1 for mode in self.rules.values()if mode)
+        affected=getattr(self.catalog,'overridden',set())if self.catalog else set()
+        selected=sum(1 for key,mode in self.rules.items()if mode and key in affected)
         region=(self.catalog.realm+' '+self.catalog.version)if self.catalog else u'欧服／亚服 2.4.1.1'
         return dict(modDisplayName=u'本地涂装屏蔽 · 状态',column1=[
           dict(type='Label',text=u'恢复选中车型的原版外观；自己的车辆不变。'),
@@ -126,15 +135,19 @@ class Controller(object):
     def register_cars(self):
         # Localize on the game thread before publishing a data-only UI snapshot.
         rows=[]
+        affected=getattr(self.catalog,'overridden',set())
         for car in self.catalog.cars:
-            label=car['label']
-            if car.get('localization'):
+            if car['key']not in affected:continue
+            label=NAMES.get(car['key'])or car['label']
+            if car['key']not in NAMES and car.get('localization'):
                 try:
                     localized=self.localize(car['localization'])
                     if isinstance(localized,str)and not isinstance(localized,type(u'')):localized=localized.decode('utf-8','replace')
                     if localized and not localized.startswith('#'):label=localized
                 except Exception:pass
-            rows.append(dict(key=car['key'],label=label,code=car['code'],nation=car['nation'],nationLabel=NATION_LABELS.get(car['nation'],car['nation'])))
+            kind=car.get('kind','')
+            rows.append(dict(key=car['key'],label=label,code=car['code'],nation=car['nation'],nationLabel=NATION_LABELS.get(car['nation'],car['nation']),
+              level=car.get('level',0),kind=kind,kindLabel=KIND_LABELS.get(kind,u'其他')))
         self.ui_rows=rows;self.revision+=1
 
     def submit(self,ticket,value):
@@ -172,13 +185,16 @@ class Controller(object):
 
     def update_panel(self):
         if self.panel is None:return
-        signature=(self.revision,self.progress,self.enabled,len(self.ready),self.last_ticket,self.busy)
+        signature=(self.revision,self.progress,self.enabled,len(self.ready),self.last_ticket,self.busy,len(self.restart_required),len(self.failed))
         if signature==self.panel_signature:return
         affected=getattr(self.catalog,'overridden',set())if self.catalog else set()
-        cars=[dict(row,overridden=row['key']in affected,prepared=row['key']in self.ready)for row in self.ui_rows]
+        cars=[dict(row,overridden=row['key']in affected,prepared=row['key']in self.ready,
+          restart=row['key']in self.restart_required,failed=row['key']in self.failed)for row in self.ui_rows]
         countries={row['nation']:row['nationLabel']for row in self.ui_rows}
+        kinds={row['kind']:row['kindLabel']for row in self.ui_rows}
         self.panel.update(dict(loading=self.catalog is None,cars=cars,rules=dict(self.rules),enabled=self.enabled,
           nations=[dict(key=key,label=value)for key,value in sorted(countries.items())],revision=self.revision,
+          levels=sorted(set(row['level']for row in self.ui_rows)),kinds=[dict(key=key,label=value)for key,value in sorted(kinds.items())],
           realm=self.catalog.realm if self.catalog else'',version=self.catalog.version if self.catalog else'',
           progress=self.progress,overrideCount=len(affected),appliedTicket=self.last_ticket,
           commandMessage=self.command_message,commandError=self.command_error))
@@ -233,22 +249,24 @@ class Controller(object):
                     key,record=item[1:];self.publish(key,record)
                 elif kind=='paused':self.busy=False;self.attempted.discard(item[1]);self.progress=u'准备已暂停；启用插件并返回车库后继续。'
                 elif kind=='failed':
-                    self.busy=False;key,error=item[1:];self.progress=u'部分车型准备失败，保留原外观。'
+                    self.busy=False;key,error=item[1:];self.failed.add(key);self.revision+=1;self.progress=u'部分车型准备失败，保留原外观。'
                     LOG.error('Private vanilla cache failed for %s: %s',key,error)
                     if not battle:self.inform(u'涂装屏蔽：'+key+u' 准备失败，保持原外观。详见日志。')
         except queue.Empty:pass
         if not battle and not self.busy and self.catalog and self.enabled and not self.error:
             affected=getattr(self.catalog,'overridden',None)
             pending=sorted(key for key,mode in self.rules.items()if mode and(affected is None or key in affected)and key not in self.ready and key not in self.attempted)
+            cached=getattr(self.catalog,'cached_vehicles',set())
+            pending.sort(key=lambda key:(key not in cached,key))
             if pending:self.prepare(pending[0])
         self.update_panel()
         self.job_id=self.world.callback(0.5,self.poll)
 
     def prepare(self,key):
-        self.busy=True;self.attempted.add(key);self.cancel.clear();self.progress=u'正在准备：'+key
+        self.busy=True;self.attempted.add(key);self.cancel.clear();self.progress=u'正在准备：'+vehicle_label(key)
         def work():
             try:
-                record=self.catalog.prepare(key,self.cancel.is_set,lambda s:self.events.put(('progress',s)))
+                record=self.catalog.prepare(key,self.cancel.is_set,lambda s:self.events.put(('progress',s.replace(key,vehicle_label(key),1))))
                 self.events.put(('ready',key,record))
             except Paused:self.events.put(('paused',key))
             except Exception as error:self.events.put(('failed',key,error))
@@ -260,26 +278,44 @@ class Controller(object):
             # files, leave native appearance intact and request a normal restart.
             purge=getattr(self.resmgr,'purge',None)
             if purge:purge('vehicles/_lsf2')
-            if not all(self.resmgr.isFile(row['destination'])for row in record['resources']):
+            missing=sum(1 for row in record['resources']if not self.resmgr.isFile(row['destination']))
+            if missing:
+                self.restart_required.add(key);self.revision+=1
+                LOG.info('Vanilla cache pending engine mount: key=%s missing=%d total=%d',key,missing,len(record['resources']))
                 self.progress=u'资源已准备；请重启游戏后生效。'
                 self.inform(u'涂装屏蔽：原版资源已准备，请重启游戏一次。');return
-            self.ready[key]=dict(record['models']);self.progress=u'已准备：'+key;self.revision+=1
-            self.inform(u'涂装屏蔽：'+key+u' 已准备，下次正常加载车辆生效。')
+            self.ready[key]=dict(record['models']);self.restart_required.discard(key);self.failed.discard(key)
+            self.progress=u'游戏可读取：'+vehicle_label(key);self.revision+=1
+            LOG.info('Vanilla cache published: key=%s resources=%d models=%d',key,len(record['resources']),len(record['models']))
+            self.inform(u'涂装屏蔽：'+vehicle_label(key)+u' 已准备，下次正常加载车辆生效。')
         except Exception:
             LOG.exception('Private resources not exposed by current client')
+            self.restart_required.add(key);self.revision+=1
             self.progress=u'资源已准备，当前会话保持原外观；请重启。'
 
     def inform(self,text):
         try:self.notify(text)
         except Exception:LOG.exception('Optional garage notification failed')
 
+    def trace(self,key,scope,status,matched=0,total=0):
+        # Only cosmetic keys and decisions; never player IDs, accounts or URLs.
+        mode=self.rules.get(key,0)
+        if not mode or len(self.decisions)>=4096:return
+        signature=(key,scope,mode,status,matched,total)
+        if signature in self.decisions:return
+        self.decisions.add(signature)
+        LOG.info('Cosmetic selection: key=%s scope=%d mode=%d status=%s parts=%d/%d',key,scope,mode,status,matched,total)
+
     def select(self,desc,models,scope):
         if not self.enabled or scope not in(1,2):return models
         key=car_key(desc,models);mode=self.rules.get(key,0)
-        if mode not in(scope,3):return models
+        if mode not in(scope,3):self.trace(key,scope,'scope_kept');return models
         mapping=self.ready.get(key)
-        if not mapping:return models
+        if not mapping:self.trace(key,scope,'not_published');return models
         mapped=[mapping.get(p.replace('\\','/').lower(),p)if isinstance(p,(str,type(u'')))else p for p in models]
+        total=sum(isinstance(p,(str,type(u'')))for p in models)
+        matched=sum(a!=b for a,b in zip(models,mapped))
+        self.trace(key,scope,'applied'if matched==total else'partial_or_unknown_path',matched,total)
         if list(models)==mapped:return models
         if hasattr(models,'_fields'):return type(models)(*mapped)
         return tuple(mapped)if isinstance(models,tuple)else mapped
@@ -298,7 +334,10 @@ def install_hooks(controller,assembler,common,compound):
     refresh_name='_CompoundAppearance__requestModelsRefresh';old_refresh=getattr(compound,refresh_name)
     def part_models(*args,**kwargs):
         models=old_paths(*args,**kwargs)
-        if not _contexts:return models
+        if not _contexts:
+            desc=args[0]if args else kwargs.get('vehicleDesc')
+            controller.trace(car_key(desc,models),0,'outside_appearance_context')
+            return models
         desc=args[0]if args else kwargs.get('vehicleDesc')
         return controller.select(desc,models,_contexts[-1])
     assembler.getPartModelsFromDesc=part_models
@@ -326,7 +365,7 @@ def init():
         g_modsListApi.addModification(id='local_skin_filter_selector',name=u'本地涂装屏蔽 · 搜索与框选',
           description=u'搜索、国家筛选、鼠标拖框与批量屏蔽敌我涂装。',icon='gui/maps/icons/modsSettingsApi/icon.png',enabled=True,login=False,lobby=True,callback=controller.open_selector)
         _controller=controller;_installed=True
-        LOG.info('In-game cosmetic filter 2.1.3 loaded; native Gameface EU/ASIA adapter. Game validation: not_tested.')
+        LOG.info('In-game cosmetic filter 2.1.5 loaded; native Gameface EU/ASIA adapter. Game validation: not_tested.')
     except Exception:LOG.exception('In-game cosmetic filter unavailable; keep native appearance')
 
 

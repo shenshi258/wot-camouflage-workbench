@@ -6,7 +6,7 @@
 
 Version 3.9 adds a scope choice for ordinary skins: all vehicles sharing the same resources (default), or only your vehicle. It applies to texture builds, 3D painting and conversion of existing ordinary skins, and is retained in drafts. Own-vehicle mode uses private resource paths and excludes UML, third-party scripts and shared-resource override packages. This controls local rendering only. In-game behavior remains untested; the garage flicker diagnostic is separate.
 
-另有独立 [本地涂装屏蔽 2.1.3 游戏内插件](game_mods/local_skin_filter/README.md)：修正界面绑定错误造成的持续“正在读取”，新增车型缓存、延后原版索引和按需显示列表。支持搜索、国家筛选、鼠标拖框、批量设置敌我范围与全部敌车，保留自己的涂装。使用包内原生 Gameface 界面，需 ModsSettings API 及 ModsList API；UML／AE 独立挂载和共享覆盖仍待适配。38 项行为测试、两区最终模块和 16 项独立交互检查通过；实际游戏显示和整车效果仍待复测。未发布远程 Release。
+另有独立 [本地涂装屏蔽 2.1.5 游戏内插件](game_mods/local_skin_filter/README.md)：选车只显示检测到自制模型／涂装的车型，采用亚服中文客户端名称，增加国家／系别、等级和类别筛选，放大文字及“应用改动”按钮，适配七种分辨率。补齐 SD／HD 高清贴图，区分挂载状态，附游戏外缓存共享工具减少重复文件占用，保留完整模型和画质。50 项行为检查及双区原生字节码、车型范围和资源回读完成；百突实际战斗分支与新包游戏视觉仍待复测。UML／AE 独立挂载与共享覆盖仍需适配，未发布远程 Release。
 
 ## English
 

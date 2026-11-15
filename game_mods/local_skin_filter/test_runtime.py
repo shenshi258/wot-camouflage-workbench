@@ -22,6 +22,42 @@ class API:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_asia_garage_names_take_priority_over_eu_localization(self):
+        key='german/g72_jagdpz_e100'
+        self.c.catalog=types.SimpleNamespace(cars=[dict(key=key,code='G72_JagdPz_E100',nation='german',label='Fallback',localization='#germany_vehicles:wrong')],overridden={key})
+        localized=[]
+        self.c.localize=lambda value:localized.append(value)or u'Wrong locale'
+        self.c.register_cars()
+        self.assertEqual(self.c.ui_rows[0]['label'],'Jg.Pz. E 100')
+        self.assertEqual(localized,[])
+
+    def test_pending_engine_mount_is_visible_and_does_not_publish_a_mapping(self):
+        self.rm.isFile=lambda name:False
+        self.c.publish(self.other,dict(resources=[dict(destination='vehicles/_lsf2/missing.model')],models={'x':'y'}))
+        self.assertIn(self.other,self.c.restart_required);self.assertNotIn(self.other,self.c.ready)
+
+    def test_selector_hides_unmodified_vehicles_and_preserves_garage_metadata(self):
+        self.configure_catalog();self.c.catalog.cars[0].update(level=11,kind='mediumTank');self.c.register_cars()
+        self.assertEqual([r['key']for r in self.c.ui_rows],[self.car])
+        self.assertEqual(self.c.ui_rows[0]['level'],11);self.assertEqual(self.c.ui_rows[0]['kind'],'mediumTank')
+        self.c.rules[self.other]=2;self.c.apply_command(1,dict(kind='rules',keys=[self.other],mode=3))
+        self.assertTrue(self.c.command_error);self.assertEqual(self.c.rules[self.other],2)
+        self.c.apply_command(2,dict(kind='all_enemies'));self.assertEqual(self.c.rules[self.other],2)
+
+    def test_prebuilt_cache_is_scheduled_before_new_bulk_copies(self):
+        self.c.catalog=types.SimpleNamespace(overridden={self.car,self.other},cached_vehicles={self.car})
+        self.c.rules={self.car:1,self.other:1};self.c.ready.clear();self.player.arena=None
+        chosen=[];self.c.prepare=chosen.append;self.c.poll()
+        self.assertEqual(chosen,[self.car])
+
+    def test_unpublished_and_unknown_paths_remain_unchanged_and_are_diagnosed(self):
+        self.c.rules[self.car]=1;self.c.ready.clear()
+        self.assertIs(self.c.select(self.desc,self.parts,1),self.parts)
+        self.assertTrue(any(v[3]=='not_published'for v in self.c.decisions))
+        self.c.ready[self.car]={'unrelated':'unrelated'}
+        self.assertIs(self.c.select(self.desc,self.parts,1),self.parts)
+        self.assertTrue(any(v[3]=='partial_or_unknown_path'for v in self.c.decisions))
+
     def test_country_keys_follow_actual_resource_directories(self):
         for nation in('japan','poland','sweden','italy'):
             desc=types.SimpleNamespace(type=types.SimpleNamespace(name=nation+':TestTank'))
@@ -65,7 +101,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(len(self.api.onSettingsChanged.items),1)
     def test_selector_catalog_and_batch_restore_saved_rules_and_reject_invalid_modes(self):
         cars=[dict(key=self.car,nation='german',code='G197_Test',label='Test',localization=None)]
-        self.c.rules[self.car]=2;self.c.catalog=types.SimpleNamespace(cars=cars);self.c.register_cars()
+        self.c.rules[self.car]=2;self.c.catalog=types.SimpleNamespace(cars=cars,overridden={self.car});self.c.register_cars()
         self.assertEqual(self.c.ui_rows[0]['key'],self.car);self.assertEqual(self.c.rules[self.car],2)
         self.player.arena=None;self.c.apply_command(1,dict(kind='rules',keys=[self.car],mode=True))
         self.assertTrue(self.c.command_error);self.assertEqual(self.c.rules[self.car],2)
@@ -76,7 +112,7 @@ class RuntimeTests(unittest.TestCase):
         self.c.register_cars()
     def test_all_enemy_action_selects_every_country_and_enables_master(self):
         self.configure_catalog();self.c.enabled=False;self.c.apply_command(1,dict(kind='all_enemies'))
-        self.assertEqual(self.c.rules,{self.car:1,self.other:1});self.assertTrue(self.c.enabled)
+        self.assertEqual(self.c.rules,{self.car:1});self.assertTrue(self.c.enabled)
         again=Controller(self.api,self.world,self.rm);self.assertEqual(again.rules,self.c.rules)
         self.api.templates[LINK]=self.c.main_template();self.api.settings[LINK]={'enabled':False}
         self.c.refresh_main();self.assertTrue(self.c.enabled)
