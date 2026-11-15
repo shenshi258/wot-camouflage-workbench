@@ -57,13 +57,44 @@ class RuntimeTests(unittest.TestCase):
         again=Controller(self.api,self.world,self.rm);self.assertFalse(again.enabled);self.assertEqual(again.rules[self.car],2)
         again.refresh_main();again.progress='new status';again.refresh_main();self.assertFalse(again.enabled)
         self.assertEqual(len(self.api.onSettingsChanged.items),1)
-    def test_vehicle_controls_use_saved_rules_and_reject_invalid_modes(self):
+    def test_selector_catalog_and_batch_restore_saved_rules_and_reject_invalid_modes(self):
         cars=[dict(key=self.car,nation='german',code='G197_Test',label='Test',localization=None)]
         self.c.rules[self.car]=2;self.c.catalog=types.SimpleNamespace(cars=cars);self.c.register_cars()
-        row=self.api.templates[LINK+'_german']['column1'][0]
-        self.assertEqual(row['value'],2);self.assertEqual(len(row['options']),4)
-        callback=self.api.callbacks[LINK+'_german'];callback(LINK+'_german',{variable(self.car):True})
-        self.assertEqual(self.c.rules[self.car],0)
+        self.assertEqual(self.c.ui_rows[0]['key'],self.car);self.assertEqual(self.c.rules[self.car],2)
+        self.player.arena=None;self.c.apply_command(1,dict(kind='rules',keys=[self.car],mode=True))
+        self.assertTrue(self.c.command_error);self.assertEqual(self.c.rules[self.car],2)
+    def configure_catalog(self):
+        self.player.arena=None
+        self.c.catalog=types.SimpleNamespace(cars=[dict(key=self.car,nation='german',code='G197_Test',label='Test',localization=None),
+          dict(key=self.other,nation='french',code='F10_Test',label='Other',localization=None)],overridden={self.car},realm='EU',version='v.test')
+        self.c.register_cars()
+    def test_all_enemy_action_selects_every_country_and_enables_master(self):
+        self.configure_catalog();self.c.enabled=False;self.c.apply_command(1,dict(kind='all_enemies'))
+        self.assertEqual(self.c.rules,{self.car:1,self.other:1});self.assertTrue(self.c.enabled)
+        again=Controller(self.api,self.world,self.rm);self.assertEqual(again.rules,self.c.rules)
+        self.api.templates[LINK]=self.c.main_template();self.api.settings[LINK]={'enabled':False}
+        self.c.refresh_main();self.assertTrue(self.c.enabled)
+    def test_batch_only_changes_selected_rows_and_invalid_ids_are_atomic(self):
+        self.configure_catalog();self.c.rules={self.car:1,self.other:2}
+        self.c.apply_command(1,dict(kind='rules',keys=[self.car],mode=3));self.assertEqual(self.c.rules[self.other],2)
+        self.assertEqual(self.c.rules[self.car],3)
+        self.c.apply_command(2,dict(kind='rules',keys=[self.car,'unknown'],mode=0))
+        self.assertTrue(self.c.command_error);self.assertEqual(self.c.rules[self.car],3)
+    def test_bulk_selection_only_prepares_locally_overridden_models(self):
+        self.configure_catalog();self.c.ready.clear();self.c.apply_command(1,dict(kind='all_enemies'))
+        calls=[];self.c.prepare=calls.append;self.c.poll();self.assertEqual(calls,[self.car])
+    def test_browser_commands_are_queued_and_not_executed_on_worker_thread(self):
+        self.configure_catalog();self.c.submit(1,dict(kind='rules',keys=[self.car],mode=2))
+        self.assertEqual(self.c.rules.get(self.car,0),0);self.c.prepare=lambda key:None;self.c.poll()
+        self.assertEqual(self.c.rules[self.car],2);self.assertEqual(self.c.last_ticket,1)
+    def test_browser_commands_during_battle_keep_saved_rules(self):
+        self.configure_catalog();self.c.rules[self.car]=1;self.player.arena=object()
+        self.c.apply_command(1,dict(kind='rules',keys=[self.car],mode=0));self.assertTrue(self.c.command_error)
+        self.assertEqual(self.c.rules[self.car],1)
+    def test_prepared_resource_status_refreshes_selector_rows(self):
+        before=self.c.revision
+        self.c.publish(self.car,dict(models={self.source.lower():self.dest},resources=[dict(destination=self.dest)]))
+        self.assertGreater(self.c.revision,before)
     def test_worker_results_are_deferred_during_battle_and_missing_live_mount_bypasses(self):
         self.c.events.put(('ready',self.car,dict(models={self.source.lower():self.dest},resources=[dict(destination=self.dest)])))
         self.c.ready.clear();self.c.busy=True;self.c.poll();self.assertFalse(self.c.ready)

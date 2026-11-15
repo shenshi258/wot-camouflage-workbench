@@ -64,7 +64,7 @@ def wrap_context(original,identify):
 
 
 class Controller(object):
-    def __init__(self,api,world,resmgr,root=None,notify=None,localize=None):
+    def __init__(self,api,world,resmgr,root=None,notify=None,localize=None,browser=None):
         self.api=api;self.world=world;self.resmgr=resmgr;self.root=root
         self.notify=notify or(lambda text:None);self.localize=localize or(lambda key:key)
         saved=api.getModData(LINK,2,dict(enabled=True,rules={}))
@@ -73,6 +73,8 @@ class Controller(object):
         self.ready={};self.catalog=None;self.error=None
         self.events=queue.Queue();self.cancel=threading.Event();self.busy=False;self.stopped=False
         self.attempted=set();self.callbacks={};self.progress=u'正在读取本区客户端车型…';self.job_id=None
+        self.browser=browser;self.panel=None;self.ui_rows=[];self.revision=0;self.panel_signature=None
+        self.last_ticket=0;self.command_message='';self.command_error=''
 
     def in_battle(self):
         try:return getattr(self.world.player(),'arena',None)is not None
@@ -91,9 +93,11 @@ class Controller(object):
         ready=sum(1 for key,mode in self.rules.items()if mode and key in self.ready)
         selected=sum(1 for mode in self.rules.values()if mode)
         region=(self.catalog.realm+' '+self.catalog.version)if self.catalog else u'欧服／亚服 2.4.1.1'
-        return dict(modDisplayName=u'本地涂装屏蔽 · 总开关',enabled=self.enabled,column1=[
+        return dict(modDisplayName=u'本地涂装屏蔽 · 状态',column1=[
           dict(type='Label',text=u'恢复选中车型的原版外观；自己的车辆不变。'),
-          dict(type='Label',text=u'左侧按国家选车型，逐车设置敌我范围。'),
+          dict(type='Label',text=u'从模组列表打开“搜索与框选”窗口。'),
+          dict(type='Label',text=u'总开关位于选车窗口右上角。'),
+          dict(type='Label',text=u'支持搜索、国家筛选、拖框多选和全部敌车。'),
           dict(type='Label',text=u'保存后返回车库，自动准备资源。无需桌面工具。'),
           dict(type='Label',text=u'状态：'+self.progress)],column2=[
           dict(type='Label',text=region),dict(type='Label',text=u'已选择 %d 款，已准备 %d 款'%(selected,ready)),
@@ -102,55 +106,91 @@ class Controller(object):
           dict(type='Label',text=u'待实测；UML／AE 独立挂载物暂不保证屏蔽。')])
 
     def on_global(self,link,values):
-        if link!=LINK or not isinstance(values,dict):return
+        if link!=LINK or not isinstance(values,dict)or'enabled'not in values:return
         enabled=values.get('enabled')is True
         if enabled!=self.enabled:self.enabled=enabled;self.persist()
 
     def persist(self):
         self.api.saveModData(LINK,2,dict(enabled=self.enabled,rules=dict(self.rules)))
+        self.revision+=1
 
     def refresh_main(self):
         if self.stopped:return
-        try:self.on_global(LINK,self.register(LINK,self.main_template(),self.on_global))
+        try:self.register(LINK,self.main_template(),self.on_global)
         except Exception:LOG.exception('Settings status refresh failed')
 
     def register_cars(self):
-        by_nation={}
-        for row in self.catalog.cars:by_nation.setdefault(row['nation'],[]).append(row)
-        for nation,cars in sorted(by_nation.items()):
-            link=LINK+'_'+nation
-            rows=[]
-            for car in cars:
-                label=car['label']
-                if car.get('localization'):
-                    try:
-                        localized=self.localize(car['localization'])
-                        if isinstance(localized,str)and not isinstance(localized,type(u'')):localized=localized.decode('utf-8','replace')
-                        if localized and not localized.startswith('#'):label=localized
-                    except Exception:pass
-                # The stable code disambiguates similarly named stock variants.
-                mode=self.rules.get(car['key'],0)
-                if isinstance(mode,bool)or mode not in(0,1,2,3):mode=0
-                rows.append(dict(type='Dropdown',text=label+' / '+car['code'],varName=variable(car['key']),value=mode,
-                  options=[dict(label=text)for text in MODES],width=180,
-                  tooltip=u'{BODY}仅改变本地安装涂装在敌车／队友上的显示。自己的车不变。保存后在车库准备原版资源；下次加载生效。{/BODY}'))
-            midpoint=(len(rows)+1)//2
-            template=dict(modDisplayName=u'涂装屏蔽 · '+NATION_LABELS.get(nation,nation),column1=rows[:midpoint],column2=rows[midpoint:])
-            callback=self.car_callback(link,cars)
-            callback(link,self.register(link,template,callback))
+        # Localize on the game thread. HTTP workers receive plain data only.
+        rows=[]
+        for car in self.catalog.cars:
+            label=car['label']
+            if car.get('localization'):
+                try:
+                    localized=self.localize(car['localization'])
+                    if isinstance(localized,str)and not isinstance(localized,type(u'')):localized=localized.decode('utf-8','replace')
+                    if localized and not localized.startswith('#'):label=localized
+                except Exception:pass
+            rows.append(dict(key=car['key'],label=label,code=car['code'],nation=car['nation'],nationLabel=NATION_LABELS.get(car['nation'],car['nation'])))
+        self.ui_rows=rows;self.revision+=1
 
-    def car_callback(self,expected,cars):
-        def changed(link,values):
-            if link!=expected or not isinstance(values,dict):return
-            altered=False
-            for car in cars:
-                mode=values.get(variable(car['key']),0)
-                if isinstance(mode,bool)or mode not in(0,1,2,3):mode=0
-                if self.rules.get(car['key'],0)!=mode:
-                    altered=True;self.attempted.discard(car['key'])
-                self.rules[car['key']]=mode
-            if altered:self.persist()
-        return changed
+    def submit(self,ticket,value):
+        # The browser server never writes settings or calls engine interfaces.
+        self.events.put(('command',ticket,value))
+
+    def apply_command(self,ticket,value):
+        try:
+            if self.in_battle():raise ValueError(u'请返回车库后再修改。')
+            known=set(row['key']for row in self.ui_rows);kind=value.get('kind')
+            if kind=='enabled':
+                enabled=value.get('enabled')
+                if not isinstance(enabled,bool):raise ValueError(u'开关值无效。')
+                self.enabled=enabled;self.persist();message=u'插件已'+(u'启用。'if enabled else u'关闭。')
+            else:
+                if not known:raise ValueError(u'车型尚未读取完成，请稍候。')
+                mode=value.get('mode');keys=value.get('keys')
+                if kind=='all_enemies':keys=sorted(known);mode=1
+                elif kind!='rules':raise ValueError(u'操作无效。')
+                if not isinstance(keys,list)or not keys or len(keys)>5000:raise ValueError(u'请选择车型。')
+                if isinstance(mode,bool)or not isinstance(mode,int)or mode not in(0,1,2,3):raise ValueError(u'屏蔽范围无效。')
+                chosen=set(keys)
+                if not chosen.issubset(known):raise ValueError(u'车型已变化，请重新打开窗口。')
+                updated=dict(self.rules)
+                for key in chosen:
+                    if updated.get(key,0)!=mode:self.attempted.discard(key)
+                    updated[key]=mode
+                self.rules=updated
+                if kind=='all_enemies':self.enabled=True
+                self.persist();message=u'已保存 %d 款车型：%s。'%(len(chosen),MODES[mode])
+            self.command_message=message;self.command_error=''
+        except (ValueError,TypeError,KeyError)as error:
+            self.command_error=type(u'')(error);self.command_message=''
+        self.last_ticket=max(self.last_ticket,ticket);self.revision+=1
+
+    def update_panel(self):
+        if self.panel is None:return
+        signature=(self.revision,self.progress,self.enabled,len(self.ready),self.last_ticket,self.busy)
+        if signature==self.panel_signature:return
+        affected=getattr(self.catalog,'overridden',set())if self.catalog else set()
+        cars=[dict(row,overridden=row['key']in affected,prepared=row['key']in self.ready)for row in self.ui_rows]
+        countries={row['nation']:row['nationLabel']for row in self.ui_rows}
+        self.panel.update(dict(loading=self.catalog is None,cars=cars,rules=dict(self.rules),enabled=self.enabled,
+          nations=[dict(key=key,label=value)for key,value in sorted(countries.items())],revision=self.revision,
+          realm=self.catalog.realm if self.catalog else'',version=self.catalog.version if self.catalog else'',
+          progress=self.progress,overrideCount=len(affected),appliedTicket=self.last_ticket,
+          commandMessage=self.command_message,commandError=self.command_error))
+        self.panel_signature=signature
+
+    def open_selector(self):
+        if self.in_battle():self.inform(u'请在车库打开搜索与框选窗口。');return
+        try:
+            if self.browser is None:raise ValueError('Game browser unavailable')
+            if self.panel is None:
+                from .selector import PanelServer
+                self.panel=PanelServer(self.submit)
+            self.update_panel();self.browser(self.panel.url)
+        except Exception:
+            LOG.exception('In-game selector unavailable')
+            self.inform(u'选车窗口未能打开，原设置保持不变。')
 
     def begin(self):
         self.refresh_main()
@@ -175,6 +215,7 @@ class Controller(object):
                     self.busy=False;self.error=item[1];self.progress=u'客户端不支持或读取失败，请查看日志。'
                     LOG.error('Catalog unavailable: %s',item[1]);self.refresh_main()
                 elif kind=='progress':self.progress=item[1]
+                elif kind=='command':self.apply_command(item[1],item[2])
                 elif kind=='ready':
                     self.busy=False
                     if battle:self.events.put(item);break
@@ -186,8 +227,10 @@ class Controller(object):
                     if not battle:self.inform(u'涂装屏蔽：'+key+u' 准备失败，保持原外观。详见日志。')
         except queue.Empty:pass
         if not battle and not self.busy and self.catalog and self.enabled and not self.error:
-            pending=sorted(key for key,mode in self.rules.items()if mode and key not in self.ready and key not in self.attempted)
+            affected=getattr(self.catalog,'overridden',None)
+            pending=sorted(key for key,mode in self.rules.items()if mode and(affected is None or key in affected)and key not in self.ready and key not in self.attempted)
             if pending:self.prepare(pending[0])
+        self.update_panel()
         self.job_id=self.world.callback(0.5,self.poll)
 
     def prepare(self,key):
@@ -209,7 +252,7 @@ class Controller(object):
             if not all(self.resmgr.isFile(row['destination'])for row in record['resources']):
                 self.progress=u'资源已准备；请重启游戏后生效。'
                 self.inform(u'涂装屏蔽：原版资源已准备，请重启游戏一次。');return
-            self.ready[key]=dict(record['models']);self.progress=u'已准备：'+key
+            self.ready[key]=dict(record['models']);self.progress=u'已准备：'+key;self.revision+=1
             self.inform(u'涂装屏蔽：'+key+u' 已准备，下次正常加载车辆生效。')
         except Exception:
             LOG.exception('Private resources not exposed by current client')
@@ -232,6 +275,7 @@ class Controller(object):
 
     def stop(self):
         self.stopped=True;self.cancel.set()
+        if self.panel is not None:self.panel.stop();self.panel=None
         if self.job_id is not None:
             try:self.world.cancelCallback(self.job_id)
             except Exception:pass
@@ -257,18 +301,27 @@ def init():
     try:
         import BigWorld,ResMgr
         from gui.modsSettingsApi import g_modsSettingsApi
+        from gui.modsListApi import g_modsListApi
         from vehicle_systems import model_assembler
         from vehicle_appearance.common_tank_appearance import CommonTankAppearance
         from vehicle_systems.CompoundAppearance import CompoundAppearance
         from gui import SystemMessages
         from helpers import i18n
+        from helpers import dependency
+        from skeletons.gui.game_control import IBrowserController
+        def browser(url):
+            dependency.instance(IBrowserController).load(url=url,title=u'车型涂装屏蔽',showActionBtn=False,showWaiting=False,
+              browserID='local_skin_filter_selector',browserSize=(1120,780),useBrowserWindow=True,
+              showCloseBtn=True,isModal=False,callback=lambda *args:None)
         controller=Controller(g_modsSettingsApi,BigWorld,ResMgr,
-          notify=lambda text:SystemMessages.pushMessage(text.encode('utf-8'),type=SystemMessages.SM_TYPE.Information),localize=i18n.makeString)
+          notify=lambda text:SystemMessages.pushMessage(text.encode('utf-8'),type=SystemMessages.SM_TYPE.Information),localize=i18n.makeString,browser=browser)
         # Fail before installing hooks if the ordinary settings API is absent.
         controller.begin()
         install_hooks(controller,model_assembler,CommonTankAppearance,CompoundAppearance)
+        g_modsListApi.addModification(id='local_skin_filter_selector',name=u'本地涂装屏蔽 · 搜索与框选',
+          description=u'搜索、国家筛选、鼠标拖框与批量屏蔽敌我涂装。',icon='gui/maps/icons/modsSettingsApi/icon.png',enabled=True,login=False,lobby=True,callback=controller.open_selector)
         _controller=controller;_installed=True
-        LOG.info('In-game cosmetic filter 2.0 loaded; EU/ASIA adapter. Game validation: not_tested.')
+        LOG.info('In-game cosmetic filter 2.1 loaded; EU/ASIA adapter. Game validation: not_tested.')
     except Exception:LOG.exception('In-game cosmetic filter unavailable; keep native appearance')
 
 

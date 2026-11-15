@@ -8,6 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'game_mods/local_skin_filter'
+VERSION='2.1'
 
 
 def digest(path):
@@ -40,38 +41,49 @@ def main():
     sys.path.insert(0,str(ROOT/'standalone/local_skin_filter'))
     from client_catalog import ClientCatalog
     from client_api import check
+    from client_pyc import Reader,walk
     records=[]
     for realm,client in [('EU',a.eu),('ASIA',a.asia)]:
         with ClientCatalog(client).scan()as catalog:
             if catalog.realm!=realm:raise ValueError('Selected client realm mismatch: '+realm)
             api=check(catalog)
+            browser_raw=catalog.read('scripts/client/gui/game_control/BrowserController.pyc')
+            reader=Reader(browser_raw);reader.pos=8;methods=[c for c in walk(reader.obj())if c.name==b'load']
+            required={b'url',b'title',b'browserID',b'browserSize',b'useBrowserWindow',b'showCloseBtn',b'callback'}
+            if len(methods)!=1 or not required.issubset(methods[0].varnames[:methods[0].argcount]):raise ValueError('Game browser API changed')
+            native_browser=catalog.read('scripts/client/gui/impl/common/browser.pyc');reader=Reader(native_browser);reader.pos=8
+            if b'IBrowserController'not in reader.obj().names:raise ValueError('Native browser dependency binding changed')
             records.append(dict(path=str(client.resolve()),realm=realm,version=catalog.version,appearance_api=api,
+              selector_browser_api_sha256=hashlib.sha256(browser_raw).hexdigest(),selector_browser_binding='dependency.instance(IBrowserController)',
               paths_xml_sha256=digest(client/'paths.xml'),version_xml_sha256=digest(client/'version.xml'),
               python27_sha256=digest(client/'win64/python27.dll'),actual_user_launch_confirmed=False))
     # These builds share verified appearance interfaces. The plugin reads each
     # client's own native resources and own vehicle list, not another realm's files.
     assert [x['sha256']for x in records[0]['appearance_api']]==[x['sha256']for x in records[1]['appearance_api']]
-    modules=('__init__','catalog','packed_xml','runtime')
+    modules=('__init__','catalog','packed_xml','runtime','selector')
     candidates=[]
     with tempfile.TemporaryDirectory(dir=ROOT/'.cache',prefix='filter20_compile_')as folder:
         work=Path(folder)
         for region in records:
             realm=region['realm'];client=Path(region['path']);out=a.output/realm;out.mkdir(exist_ok=False)
-            target=out/'local.skin_filter_2.0.wotmod'
+            target=out/('local.skin_filter_'+VERSION+'.wotmod')
             with zipfile.ZipFile(target,'x')as z:
                 meta=ET.Element('root')
-                for k,v in [('id','local.skin_filter'),('version','2.0'),('name','In-game local skin filter EU ASIA - pending tests')]:ET.SubElement(meta,k).text=v
+                for k,v in [('id','local.skin_filter'),('version',VERSION),('name','In-game local skin filter EU ASIA - pending tests')]:ET.SubElement(meta,k).text=v
                 stored(z,'meta.xml',ET.tostring(meta,encoding='utf-8',xml_declaration=True))
                 for name in modules:
                     compiled=work/(realm+'_'+name+'.pyc');compile27(SOURCE/(name+'.py'),compiled,client,'local_skin_filter2/'+name+'.py')
                     stored(z,'res/scripts/client/gui/mods/local_skin_filter/'+name+'.pyc',compiled.read_bytes())
+                assets=work/'panel_assets.py';assets.write_text('HTML = u'+ascii((SOURCE/'selector.html').read_text('utf-8'))+".encode('utf-8')\n",encoding='ascii')
+                compiled=work/(realm+'_panel_assets.pyc');compile27(assets,compiled,client,'local_skin_filter2/panel_assets.py')
+                stored(z,'res/scripts/client/gui/mods/local_skin_filter/panel_assets.pyc',compiled.read_bytes())
                 entry=work/'mod_entry.py';entry.write_bytes((SOURCE/'mod_entry.py.txt').read_bytes())
                 compiled=work/(realm+'_entry.pyc');compile27(entry,compiled,client,'local_skin_filter2/mod_entry.py')
                 stored(z,'res/scripts/client/gui/mods/mod_zz_local_skin_filter.pyc',compiled.read_bytes())
             with zipfile.ZipFile(target)as z:
                 assert z.testzip()is None
                 assert all(i.compress_type==zipfile.ZIP_STORED for i in z.infolist())
-            result=dict(tool='In-game local skin filter 2.0',artifact=dict(path=str(target.resolve()),sha256=digest(target),bytes=target.stat().st_size),
+            result=dict(tool='In-game local skin filter '+VERSION,artifact=dict(path=str(target.resolve()),sha256=digest(target),bytes=target.stat().st_size),
                 client=region,file_validation=dict(status='passed',zip_crc=True,stored_only=True,private_python_namespace=True,
                       native_resource_payloads=False),offline_validation=dict(status='not_tested'),
                 whole_vehicle_loading=dict(status='not_tested'),in_game_tested=False,

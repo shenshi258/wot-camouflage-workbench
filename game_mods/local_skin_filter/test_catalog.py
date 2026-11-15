@@ -87,6 +87,16 @@ class CatalogTests(unittest.TestCase):
         from xml.etree import ElementTree as ET
         root=ET.Element('root');node=ET.SubElement(root,'property');node.text='property\r\n  >'
         restored=parse(encode_xml(root));self.assertEqual(restored.findtext('property'),node.text)
+    def test_override_scan_identifies_only_existing_stock_paths_and_skips_private_cache(self):
+        self.assertIsNone(path(b'res/vehicles/unknown/\xa3'))
+        mods=self.root/'mods/2.4.1.1';mods.mkdir(parents=True)
+        with zipfile.ZipFile(mods/'skin.wotmod','w')as z:
+            z.writestr('res/'+self.base+'normal/lod0/Hull.model',b'custom')
+            z.writestr('res/scripts/client/gui/mods/mod_unknown.py',b'raise RuntimeError("never execute")')
+            z.writestr('res/vehicles/german/Custom/normal/lod0/Hull.model',b'custom')
+        self.catalog.mod_roots=[str(mods)]
+        self.assertEqual(self.catalog.scan_overrides(),{'german/g197_test'})
+        self.assertEqual(self.catalog.read(self.base+'normal/lod0/Hull.model'),self.files[self.base+'normal/lod0/Hull.model'])
 
 
 if __name__=='__main__':unittest.main()

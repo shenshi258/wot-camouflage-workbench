@@ -27,6 +27,9 @@ def sha(data):
 
 
 def path(value):
+    if isinstance(value,bytes)and not isinstance(value,type(u'')):
+        try:value=value.decode('utf-8')
+        except UnicodeDecodeError:return None
     value=(value or '').strip().replace('\\','/')
     if not value or value.startswith('/')or ':'in value or '..'in value.split('/'):return None
     value='/'.join(p for p in value.split('/')if p)
@@ -81,7 +84,8 @@ def rewrite(root,mapping):
 
 class Catalog(object):
     def __init__(self,root):
-        self.root=os.path.realpath(root);self.index={};self.packages=[];self.archives={};self.cars=[]
+        self.root=os.path.realpath(root);self.index={};self.packages=[];self.archives={};self.cars=[];self.mod_roots=[]
+        self.overridden=set();self.override_warnings=[]
         version_raw=self._file('version.xml');paths_raw=self._file('paths.xml')
         version=parse(version_raw);self.version=(version.findtext('version')or'').strip()
         self.realm=(version.findtext('meta/realm')or'').strip()
@@ -98,6 +102,9 @@ class Catalog(object):
                 self.packages.append(source);info=os.stat(source);stamps.append((name,info.st_size,int(info.st_mtime)))
         for node in tree.findall('.//Paths/Path'):
             name=path(node.text)
+            if name and node.get('mask')=='*.wotmod':
+                source=os.path.realpath(os.path.join(self.root,*name.split('/')))
+                if within(self.root,source):self.mod_roots.append(source)
             if name and node.get('mask')is None and name.lower()=='./res_mods/'+self.branch:name=name[2:]
             if name and node.get('mask')is None and name.lower()=='res_mods/'+self.branch:
                 self.resmods=os.path.realpath(os.path.join(self.root,*name.split('/')))
@@ -138,7 +145,44 @@ class Catalog(object):
                 ident=nation+'/'+node.tag.lower()
                 if ident in found:found[ident]['localization']=node.findtext('shortUserString')or node.findtext('userString')
         self.cars=sorted(found.values(),key=lambda row:row['key'])
+        self.scan_overrides()
         return self
+
+    def scan_overrides(self):
+        """Index stock vehicle overrides without executing mod code or copying skins.
+
+        Selecting every enemy should not duplicate every vanilla vehicle. Cars
+        with no local stock-path override already have the original appearance.
+        """
+        known=set(row['key']for row in self.cars);hits=set();warnings=[]
+        def inspect(value):
+            name=path(value)
+            if not name:return
+            key=name.lower();parts=key.split('/')
+            if len(parts)>3 and parts[0]=='vehicles'and key in self.index and key.endswith(ALLOWED):
+                vehicle='/'.join(parts[1:3])
+                if vehicle in known:hits.add(vehicle)
+        for folder in self.mod_roots:
+            if not os.path.isdir(folder):continue
+            for current,dirs,files in os.walk(folder):
+                for filename in files:
+                    if not filename.lower().endswith('.wotmod'):continue
+                    try:
+                        with zipfile.ZipFile(os.path.join(current,filename))as z:
+                            for info in z.infolist():inspect(info.filename)
+                    except (IOError,OSError,zipfile.BadZipfile):warnings.append(filename)
+        vehicles=os.path.join(self.resmods,'vehicles')
+        if os.path.isdir(vehicles):
+            for nation in os.listdir(vehicles):
+                nation_dir=os.path.join(vehicles,nation)
+                if not os.path.isdir(nation_dir)or nation.startswith('_'):continue
+                for code in os.listdir(nation_dir):
+                    if (nation+'/'+code).lower()not in known:continue
+                    car_dir=os.path.join(nation_dir,code)
+                    for current,dirs,files in os.walk(car_dir):
+                        for filename in files:inspect(os.path.relpath(os.path.join(current,filename),self.resmods))
+        self.overridden=hits;self.override_warnings=warnings
+        return hits
 
     def read(self,name):
         key=path(name)

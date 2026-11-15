@@ -1,27 +1,31 @@
-# 本地涂装屏蔽 2.0：游戏内插件
+# 本地涂装屏蔽 2.1：游戏内搜索与拖框
 
-直接安装 `.wotmod`，在 ModsSettings API 的游戏内设置窗口按国家找车型，
-每款车选择不屏蔽、仅敌车、仅队友或敌我都屏蔽；自己的车不变。
-欧服和亚服读取各自原版车型与资源，无需桌面准备工具。
+直接安装 `.wotmod`，在车库模组列表打开“本地涂装屏蔽 · 搜索与框选”。
+按车型名称／编号搜索，与国家筛选叠加，鼠标拖矩形圈选多行。支持 Ctrl
+追加、Shift 连选、边缘自动滚动、全选筛选结果及“一键屏蔽全部敌车”。
+选中车型可批量设置不屏蔽、仅敌车、仅队友或敌我都屏蔽；自己的车不变。
+2.0 已保存的规则和总开关继续保留。
 
-用户保存选择后，插件只在车库准备所需原版资源，保存在自己的
-`res_mods/<version>/vehicles/_lsf2/` 空间。完成并确认引擎能看到文件后，
-才允许模型路径切换。冷缓存、异常、观察者或不明队伍均保留原外观。
-首次动态文件挂载不可见时提示正常重启；不强制战斗中的模型刷新。
+界面使用客户端内置浏览器和包内自包含页面，设置在本机传递。页面工作
+线程只收取带本次随机令牌的请求并入队，游戏及 UI API 留在主线程。没有
+外部网站、外部浏览器、进程注入或反作弊规避。`selector.html` 是可编辑源，
+构建器将其编译成包内资源模块，不依赖用户电脑安装 Node 或浏览器。
 
-缓存工作线程不调用游戏 API；UI、通知及引擎文件可见性检查在主线程执行。
-原版 `.pkg` 和已有模组均只读。原版材质/着色器标识和网格字节保留，
-只隔离可视资源引用；碰撞、可见性、点亮、瞄准、输入和反作弊入口未修改。
-不执行输入涂装包脚本，不保证移除第三方独立挂载物。
+欧服／亚服读取各自原版资源和已安装覆盖列表。只为识别到原版车型目录
+有覆盖的车型准备原版缓存，避免全选时复制全游戏；准备只在车库进行，
+完整回读后才发布。原 `.pkg` 与旧模组不改写。缓存位于自己的
+`res_mods/<version>/vehicles/_lsf2/` 目录；缺少缓存、异常、观察者和不明队伍
+都保留当前外观。UML／AE 独立挂载及共享全局覆盖仍需适配。
 
-依赖原作者 [ModsSettings API](https://github.com/izeberg/modssettingsapi)
-及 ModsList API，不重新分发这两个框架。Packed XML 解析器沿用项目中
-GPLv3 的 XmlUnpacker，许可证和可审阅源码同时保留。
+保留原版材质标识、着色器、网格字节和标量文本，只隔离可视资源引用；
+碰撞、可见性、点亮、瞄准、输入与反作弊入口未修改。依赖原作者
+[ModsSettings API](https://github.com/izeberg/modssettingsapi) 及 ModsList API，
+不重新分发它们。Packed XML 解析器的 GPLv3 许可证和源码保留。
 
-离线验证目标为 EU `2.4.1.1 #993` 和 ASIA `2.4.1.1 #991`，包括最终包内
-Python 2.7 模块、实际本区资源和原生可视路径选择函数；引擎/UI 使用替身。
-所有游戏内视觉与整车结果仍为 `not_tested`，没有官方审核或反作弊零误报保证。
+验证包括 32 项行为测试、两区最终 Python 2.7 字节码／资源／本机页面复核，
+以及实际 Chromium 中 11 项交互与布局检查。引擎/UI 接口使用替身，实际
+游戏内 CEF、视觉与整车状态仍为 `not_tested`；没有官方审核或零误报保证。
 
-源码检查：`python -m unittest discover -s game_mods -t game_mods -p test_*.py`
-构建与最终字节码核对脚本见仓库 `tools/build_in_game_skin_filter.py`、
-`tools/check_in_game_filter27.py`。它们只在独立进程进行离线检查，不启动游戏。
+源码测试：`python -m unittest discover -s game_mods -t game_mods -p test_*.py`
+构建及复核工具见仓库 `tools/build_in_game_skin_filter.py`、
+`tools/check_in_game_filter27.py`、`tools/check_selector_browser.py`。
