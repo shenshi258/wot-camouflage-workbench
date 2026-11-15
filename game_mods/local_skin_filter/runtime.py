@@ -309,10 +309,18 @@ def init():
         from helpers import i18n
         from helpers import dependency
         from skeletons.gui.game_control import IBrowserController
+        from adisp import adisp_process
+        @adisp_process
         def browser(url):
-            dependency.instance(IBrowserController).load(url=url,title=u'车型涂装屏蔽',showActionBtn=False,showWaiting=False,
-              browserID='local_skin_filter_selector',browserSize=(1120,780),useBrowserWindow=True,
-              showCloseBtn=True,isModal=False,callback=lambda *args:None)
+            # Native load() is adisp_async: it returns a deferred caller. Yield
+            # it through the game's dispatcher; merely calling it does no work.
+            try:
+                yield dependency.instance(IBrowserController).load(url=url,title=u'车型涂装屏蔽',showActionBtn=False,showWaiting=False,
+                  browserID='local_skin_filter_selector',browserSize=(1120,780),useBrowserWindow=True,
+                  showCloseBtn=True,isModal=False)
+            except Exception:
+                LOG.exception('Native selector window could not be opened')
+                controller.inform(u'选车窗口打开失败，请查看插件日志。')
         controller=Controller(g_modsSettingsApi,BigWorld,ResMgr,
           notify=lambda text:SystemMessages.pushMessage(text.encode('utf-8'),type=SystemMessages.SM_TYPE.Information),localize=i18n.makeString,browser=browser)
         # Fail before installing hooks if the ordinary settings API is absent.
@@ -321,7 +329,7 @@ def init():
         g_modsListApi.addModification(id='local_skin_filter_selector',name=u'本地涂装屏蔽 · 搜索与框选',
           description=u'搜索、国家筛选、鼠标拖框与批量屏蔽敌我涂装。',icon='gui/maps/icons/modsSettingsApi/icon.png',enabled=True,login=False,lobby=True,callback=controller.open_selector)
         _controller=controller;_installed=True
-        LOG.info('In-game cosmetic filter 2.1 loaded; EU/ASIA adapter. Game validation: not_tested.')
+        LOG.info('In-game cosmetic filter 2.1.1 loaded; EU/ASIA adapter. Game validation: not_tested.')
     except Exception:LOG.exception('In-game cosmetic filter unavailable; keep native appearance')
 
 

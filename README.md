@@ -6,7 +6,7 @@
 
 Version 3.9 adds a scope choice for ordinary skins: all vehicles sharing the same resources (default), or only your vehicle. It applies to texture builds, 3D painting and conversion of existing ordinary skins, and is retained in drafts. Own-vehicle mode uses private resource paths and excludes UML, third-party scripts and shared-resource override packages. This controls local rendering only. In-game behavior remains untested; the garage flicker diagnostic is separate.
 
-另有独立 [本地涂装屏蔽 2.1 游戏内插件](game_mods/local_skin_filter/README.md)：在车库模组列表打开“搜索与框选”，按名称／编号搜索并筛选国家，用鼠标拖框多选后批量设置敌我范围，也可一键屏蔽全部敌车，保留自己的涂装。读取当前欧服／亚服原版资源，只为检测到本地覆盖的车型准备缓存，无需桌面工具。需 ModsSettings API 及 ModsList API；UML／AE 独立挂载和全局共享覆盖暂不保证屏蔽。两区离线脚本及独立浏览器交互检查通过，游戏内效果仍待实测；未经官方审核，不保证反作弊零误报。本次没有发布远程 Release，也不包含旧 AE 闪烁修复。
+另有独立 [本地涂装屏蔽 2.1.1 游戏内插件](game_mods/local_skin_filter/README.md)：修正 2.1 在欧服点击菜单不弹窗的原生任务调度错误。支持名称／编号搜索、国家筛选、鼠标拖框批量设置敌我范围和一键屏蔽全部敌车，保留自己的涂装。只为检测到本地覆盖的车型准备当前区服原版缓存，无需桌面工具。需 ModsSettings API 及 ModsList API；UML／AE 独立挂载和全局共享覆盖暂不保证屏蔽。两区原生调度回归及独立浏览器交互检查通过，实际游戏窗口和涂装效果仍待复测；未经官方审核，不保证反作弊零误报。未发布远程 Release，也不包含旧 AE 闪烁修复。
 
 ## English
 

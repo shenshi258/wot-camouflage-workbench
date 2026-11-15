@@ -116,6 +116,20 @@ sys.modules['BigWorld']=world;sys.modules['ResMgr']=rm
 fresh_api=API();mod('gui.modsSettingsApi').g_modsSettingsApi=fresh_api
 menu=[];menu_api=Obj();menu_api.addModification=lambda **kw:menu.append(kw);mod('gui.modsListApi').g_modsListApi=menu_api
 browser_ctrl=Obj();opened=[];browser_ctrl.load=lambda **kw:opened.append(kw)
+# Use the real game dispatcher. A plain mock that appends on load() would hide
+# the precise 2.1 bug: adisp_async returns a callable without starting it.
+adisp_errors=[];debug=mod('debug_utils')
+debug.LOG_ERROR=lambda *args:adisp_errors.append('error')
+debug.LOG_WRAPPED_CURRENT_EXCEPTION=lambda *args:adisp_errors.append('exception')
+class SoftException(Exception):pass
+mod('soft_exception').SoftException=SoftException
+adisp=mod('adisp');exec marshal.loads(open(ADISP,'rb').read()[8:])in adisp.__dict__
+@adisp.adisp_async
+def deferred_browser(callback=None,**kwargs):
+ opened.append(kwargs);callback('local_skin_filter_selector')
+browser_ctrl.load=deferred_browser
+unused=browser_ctrl.load(url='http://127.0.0.1/protocol-test')
+assert callable(unused)and not opened
 mod('skeletons');mod('skeletons.gui');mod('skeletons.gui.game_control').IBrowserController=object()
 messages=mod('gui.SystemMessages');messages.pushMessage=lambda *a,**kw:None;messages.SM_TYPE=Obj();messages.SM_TYPE.Information=1;gui.SystemMessages=messages
 helpers=mod('helpers');helpers.i18n=Obj();helpers.i18n.makeString=lambda value:value
@@ -129,11 +143,13 @@ os.getcwd=original_getcwd
 assert runtime._controller.catalog.realm==c.realm and not runtime._controller.ready
 assert len(menu)==1 and menu[0]['lobby']is True and menu[0]['login']is False
 menu[0]['callback']();assert opened and opened[0]['useBrowserWindow']is True and opened[0]['showActionBtn']is False
+assert not adisp_errors,adisp_errors
 runtime.fini();assert runtime._controller.stopped
 result=dict(status='passed',realm=c.realm,version=c.version,vehicle_count=len(c.cars),cache_resources=len(record['resources']),
  model_paths=len(record['models']),cycles=100,modes=4,states=3,entry_pyc_executed=True,
  default_and_distinct_style_models=True,utf8_localization=True,own_kept=True,collision_getter_unchanged=True,
  selector_loopback_verified=True,selector_html_sha256=html_sha256,game_browser_call_verified=True,
+ native_adisp_contract_verified=True,legacy_unawaited_call_reproduced=True,
  preparation_output=out,game_process_started=False,whole_vehicle_loading=dict(status='not_tested'))
 with open(os.path.join(out,'native_result.json'),'wb')as f:f.write(json.dumps(result,sort_keys=True))
 c.close();runtime._controller.catalog.close()
@@ -151,10 +167,13 @@ def main():
             rel=info.filename.removeprefix('res/scripts/client/');dest=extracted/rel
             dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(info))
     native=a.output/'native_selector.pyc'
-    with zipfile.ZipFile(client/'res/packages/scripts.pkg')as z:native.write_bytes(z.read('scripts/client/vehicle_systems/tankStructure.pyc'))
+    adisp=a.output/'native_adisp.pyc'
+    with zipfile.ZipFile(client/'res/packages/scripts.pkg')as z:
+        native.write_bytes(z.read('scripts/client/vehicle_systems/tankStructure.pyc'))
+        adisp.write_bytes(z.read('scripts/client_common/adisp.pyc'))
     code=PROBE
     for name,value in [('EXTRACT',extracted),('LIB',str(client/'res/packages/scripts.pkg')+'/scripts/common/Lib'),('CLIENT',client),
-       ('OUTPUT',a.output.resolve()),('NATIVE',native.resolve()),('ENTRY',(extracted/'gui/mods/mod_zz_local_skin_filter.pyc').resolve())]:
+       ('OUTPUT',a.output.resolve()),('NATIVE',native.resolve()),('ADISP',adisp.resolve()),('ENTRY',(extracted/'gui/mods/mod_zz_local_skin_filter.pyc').resolve())]:
         code=code.replace(name,'u'+ascii(str(value)))
     source=a.output/'probe_py27.txt';source.write_text(code,encoding='ascii')
     helper="import ctypes,sys;d=ctypes.PyDLL(sys.argv[1]);ctypes.c_int.in_dll(d,'Py_NoSiteFlag').value=1;d.Py_Initialize();d.PyRun_SimpleString.argtypes=[ctypes.c_char_p];sys.exit(bool(d.PyRun_SimpleString(open(sys.argv[2],'rb').read())))"

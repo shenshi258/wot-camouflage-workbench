@@ -8,7 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'game_mods/local_skin_filter'
-VERSION='2.1'
+VERSION='2.1.1'
 
 
 def digest(path):
