@@ -1,5 +1,5 @@
 import collections,types,unittest
-from .runtime import Controller,MODES,LINK,variable,team_scope,install_hooks,wrap_context,_contexts
+from .runtime import Controller,MODES,LINK,variable,team_scope,install_hooks,wrap_context,_contexts,car_key,NATION_LABELS
 
 
 class Event:
@@ -22,6 +22,12 @@ class API:
 
 
 class RuntimeTests(unittest.TestCase):
+    def test_country_keys_follow_actual_resource_directories(self):
+        for nation in('japan','poland','sweden','italy'):
+            desc=types.SimpleNamespace(type=types.SimpleNamespace(name=nation+':TestTank'))
+            self.assertEqual(car_key(desc,()),nation+'/testtank')
+            self.assertNotEqual(NATION_LABELS[nation],nation)
+
     def setUp(self):
         self.api=API();self.player=types.SimpleNamespace(playerVehicleID=1,team=1,isObserver=lambda:False,
              arena=types.SimpleNamespace(vehicles={1:{'team':1},2:{'team':2},3:{'team':1}}))

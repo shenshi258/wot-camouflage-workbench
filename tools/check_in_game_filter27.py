@@ -16,7 +16,11 @@ def mod(name,paths=None):
 gui=mod('gui',[os.path.join(EXTRACT,'gui')]);mods=mod('gui.mods',[os.path.join(EXTRACT,'gui','mods')]);gui.mods=mods
 from gui.mods.local_skin_filter import catalog,runtime
 root=CLIENT;out=OUTPUT
-c=catalog.Catalog(root).scan()
+metadata=os.path.join(out,'metadata')
+started=time.time();c=catalog.Catalog(root).scan(cache_dir=metadata);cold_seconds=time.time()-started
+started=time.time();warm=catalog.Catalog(root).scan(cache_dir=metadata);warm_seconds=time.time()-started
+assert warm.metadata_cache_hit and not warm.index and warm.cars==c.cars and warm.overridden==c.overridden
+warm.ensure_index();assert warm.index==c.index;warm.close()
 assert c.realm in('EU','ASIA')and len(c.cars)>1000
 c.resmods=os.path.join(out,'cache')
 record=c.prepare('german/g197_pz_kpfw_neu')
@@ -61,7 +65,8 @@ class Model(object):
 class ViewSettings(object):
  def __init__(self,layout):self.layout=layout
 class View(object):
- def __init__(self,settings):self.settings=settings;self.viewModel=settings.model
+ def __init__(self,settings):self.settings=settings;self._view_model=settings.model
+ def getViewModel(self):return self._view_model
  def _onLoading(self,*args,**kwargs):
   for event,handler in self._getEvents():event+=handler
  def _finalize(self):
@@ -152,6 +157,7 @@ menu=[];menu_api=Obj();menu_api.addModification=lambda **kw:menu.append(kw);mod(
 messages=mod('gui.SystemMessages');messages.pushMessage=lambda *a,**kw:None;messages.SM_TYPE=Obj();messages.SM_TYPE.Information=1;gui.SystemMessages=messages
 helpers=mod('helpers');helpers.i18n=Obj();helpers.i18n.makeString=lambda value:value
 player.arena=None;original_getcwd=os.getcwd;os.getcwd=lambda:root
+runtime.catalog_metadata_dir=lambda root:os.path.join(out,'entry_metadata')
 entry={};exec marshal.loads(open(ENTRY,'rb').read()[8:])in entry
 assert runtime._installed and runtime._controller is not None
 hook=Common.__dict__['prerequisites'];entry['init']();assert hook is Common.__dict__['prerequisites']
@@ -167,6 +173,7 @@ result=dict(status='passed',realm=c.realm,version=c.version,vehicle_count=len(c.
  default_and_distinct_style_models=True,utf8_localization=True,own_kept=True,collision_getter_unchanged=True,
  selector_native_bridge_verified=True,selector_html_sha256=html_sha256,
  native_gameface_contract_verified=True,close_reopen_verified=True,no_http_listener=True,
+ metadata_cache_verified=True,startup_cold_seconds=cold_seconds,startup_warm_seconds=warm_seconds,
  preparation_output=out,game_process_started=False,whole_vehicle_loading=dict(status='not_tested'))
 with open(os.path.join(out,'native_result.json'),'wb')as f:f.write(json.dumps(result,sort_keys=True))
 c.close();runtime._controller.catalog.close()

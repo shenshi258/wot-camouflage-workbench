@@ -6,7 +6,7 @@ input, network or anti-cheat interfaces are changed. Worker threads use ordinary
 file APIs only. Engine/UI calls run on BigWorld's main-thread callback.
 """
 from __future__ import unicode_literals
-import logging,threading
+import logging,threading,os,time
 try:
     import Queue as queue
 except ImportError:
@@ -17,11 +17,15 @@ LOG=logging.getLogger('LocalSkinFilter2')
 LINK='local_skin_filter2'
 MODES=[u'不屏蔽',u'仅敌车',u'仅队友',u'敌车和队友']
 NATION_LABELS={'german':u'德国','french':u'法国','american':u'美国','british':u'英国',
- 'russian':u'苏联','chinese':u'中国','japanese':u'日本','czech':u'捷克',
- 'polish':u'波兰','swedish':u'瑞典','italian':u'意大利'}
+ 'russian':u'苏联','chinese':u'中国','japan':u'日本','czech':u'捷克',
+ 'poland':u'波兰','sweden':u'瑞典','italy':u'意大利'}
 _controller=None
 _installed=False
 _contexts=[]
+
+
+def catalog_metadata_dir(root):
+    return os.path.join(root,'mods','configs','local_skin_filter','catalog')
 
 
 def variable(key):
@@ -134,7 +138,7 @@ class Controller(object):
         self.ui_rows=rows;self.revision+=1
 
     def submit(self,ticket,value):
-        # The browser server never writes settings or calls engine interfaces.
+        # Queue UI commands; settings and engine calls stay in poll().
         self.events.put(('command',ticket,value))
 
     def apply_command(self,ticket,value):
@@ -199,7 +203,11 @@ class Controller(object):
         self.api.onWindowOpened+=self.refresh_main
         self.busy=True
         def read_catalog():
-            try:self.events.put(('catalog',Catalog(self.root or find_root()).scan()))
+            try:
+                started=time.time();root=self.root or find_root()
+                catalog=Catalog(root).scan(cache_dir=catalog_metadata_dir(root))
+                LOG.info('Vehicle metadata ready: %d cars, %.3fs, cache_hit=%s',len(catalog.cars),max(0,time.time()-started),catalog.metadata_cache_hit)
+                self.events.put(('catalog',catalog))
             except Exception as error:self.events.put(('fatal',error))
         worker=threading.Thread(target=read_catalog);worker.daemon=True;worker.start()
         self.job_id=self.world.callback(0.25,self.poll)
@@ -318,7 +326,7 @@ def init():
         g_modsListApi.addModification(id='local_skin_filter_selector',name=u'本地涂装屏蔽 · 搜索与框选',
           description=u'搜索、国家筛选、鼠标拖框与批量屏蔽敌我涂装。',icon='gui/maps/icons/modsSettingsApi/icon.png',enabled=True,login=False,lobby=True,callback=controller.open_selector)
         _controller=controller;_installed=True
-        LOG.info('In-game cosmetic filter 2.1.2 loaded; native Gameface EU/ASIA adapter. Game validation: not_tested.')
+        LOG.info('In-game cosmetic filter 2.1.3 loaded; native Gameface EU/ASIA adapter. Game validation: not_tested.')
     except Exception:LOG.exception('In-game cosmetic filter unavailable; keep native appearance')
 
 

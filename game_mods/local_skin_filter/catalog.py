@@ -14,8 +14,8 @@ XML = ('.model','.visual','.visual_processed','.mfm')
 ALLOWED = XML + ('.dds','.vt','.primitives','.primitives_processed')
 PREFIX = 'vehicles/_lsf2/'
 NATIONS = {'german':'germany','french':'france','american':'usa','british':'uk',
-           'russian':'ussr','chinese':'china','japanese':'japan','czech':'czech',
-           'polish':'poland','swedish':'sweden','italian':'italy'}
+           'russian':'ussr','chinese':'china','japan':'japan','czech':'czech',
+           'poland':'poland','sweden':'sweden','italy':'italy'}
 
 
 class Paused(Exception):
@@ -86,6 +86,7 @@ class Catalog(object):
     def __init__(self,root):
         self.root=os.path.realpath(root);self.index={};self.packages=[];self.archives={};self.cars=[];self.mod_roots=[]
         self.overridden=set();self.override_warnings=[]
+        self.index_loaded=False;self.metadata_cache_hit=False
         version_raw=self._file('version.xml');paths_raw=self._file('paths.xml')
         version=parse(version_raw);self.version=(version.findtext('version')or'').strip()
         self.realm=(version.findtext('meta/realm')or'').strip()
@@ -124,11 +125,88 @@ class Catalog(object):
         if not within(os.path.join(self.resmods,*PREFIX.strip('/').split('/')),result):raise ValueError('Cache path escaped')
         return result
 
-    def scan(self):
+    def _override_stamp(self):
+        """Stat installed overrides without reopening their ZIP directories."""
+        stamps=[];seen=set()
+        def add(filename):
+            key=os.path.normcase(os.path.realpath(filename))
+            if key in seen:return
+            seen.add(key);info=os.stat(filename)
+            stamps.append((os.path.relpath(filename,self.root),info.st_size,info.st_mtime))
+        for folder in self.mod_roots:
+            if not os.path.isdir(folder):continue
+            for current,dirs,files in os.walk(folder):
+                for name in files:
+                    if name.lower().endswith('.wotmod'):add(os.path.join(current,name))
+        vehicles=os.path.join(self.resmods,'vehicles')
+        if os.path.isdir(vehicles):
+            for nation in os.listdir(vehicles):
+                folder=os.path.join(vehicles,nation)
+                if nation.startswith('_')or not os.path.isdir(folder):continue
+                for current,dirs,files in os.walk(folder):
+                    for name in files:add(os.path.join(current,name))
+        return sha(json.dumps(sorted(stamps),ensure_ascii=True,separators=(',',':')).encode('ascii'))
+
+    def _metadata(self,folder,signature,save=False):
+        """Cache small vehicle metadata; native model bytes are never trusted here."""
+        target=os.path.join(os.path.realpath(folder),'catalog2_'+self.fingerprint+'_'+signature+'.json')
+        if save:
+            payload=dict(cars=self.cars,overridden=sorted(self.overridden),warnings=self.override_warnings)
+            text=json.dumps(payload,ensure_ascii=True,sort_keys=True,separators=(',',':'))
+            data=dict(schema=2,fingerprint=self.fingerprint,overrides=signature,payload=text,sha256=sha(text.encode('ascii')))
+            if not os.path.isdir(folder):os.makedirs(folder)
+            temporary=target+'.'+uuid.uuid4().hex+'.tmp'
+            try:
+                with io.open(temporary,'w',encoding='ascii')as f:f.write(type(u'')(json.dumps(data,ensure_ascii=True)))
+                if os.path.isfile(target):os.remove(target)
+                os.rename(temporary,target)
+            finally:
+                if os.path.isfile(temporary):os.remove(temporary)
+            return True
+        if not os.path.isfile(target)or os.path.getsize(target)>5*1024*1024:return False
+        with io.open(target,encoding='ascii')as f:data=json.load(f)
+        if data.get('schema')!=2 or data.get('fingerprint')!=self.fingerprint or data.get('overrides')!=signature:return False
+        text=data['payload']
+        if sha(text.encode('ascii'))!=data['sha256']:return False
+        payload=json.loads(text);cars=payload['cars'];known=set()
+        if not isinstance(cars,list)or not 0<len(cars)<=5000:return False
+        for car in cars:
+            nation=car['nation'];code=car['code'];key=car['key']
+            if nation not in NATIONS or not re.match(r'^[A-Za-z0-9_\-]+$',code)or key!=nation+'/'+code.lower()or key in known:return False
+            if not isinstance(car['label'],(str,type(u'')))or len(car['label'])>250:return False
+            localization=car.get('localization')
+            if localization is not None and(not isinstance(localization,(str,type(u'')))or len(localization)>250):return False
+            known.add(key)
+        affected=payload['overridden'];warnings=payload['warnings']
+        if not isinstance(affected,list)or not set(affected).issubset(known):return False
+        if not isinstance(warnings,list)or not all(isinstance(v,(str,type(u'')))for v in warnings):return False
+        self.cars=cars;self.overridden=set(affected);self.override_warnings=warnings
+        self.metadata_cache_hit=True
+        return True
+
+    def scan(self,cache_dir=None):
+        signature=None
+        if cache_dir:
+            try:
+                signature=self._override_stamp()
+                if self._metadata(cache_dir,signature):return self
+            except (IOError,OSError,ValueError,KeyError,TypeError,AttributeError):pass
+        self.ensure_index();self.scan_overrides()
+        if cache_dir and signature:
+            try:self._metadata(cache_dir,signature,save=True)
+            except (IOError,OSError,ValueError,TypeError):pass
+        return self
+
+    def ensure_index(self,cancel=lambda:False):
+        # Warm startup needs only the small metadata snapshot. The full native
+        # dependency index is deferred to the resource preparation worker.
+        if self.index_loaded:return
         found={}
         for source in self.packages:
+            if cancel():raise Paused()
             with zipfile.ZipFile(source)as archive:
-                for info in archive.infolist():
+                for number,info in enumerate(archive.infolist()):
+                    if number%1024==0 and cancel():raise Paused()
                     if info.filename.endswith('/'):continue
                     name=path(info.filename)
                     if not name:raise ValueError('Unsafe native resource path')
@@ -137,6 +215,7 @@ class Catalog(object):
                     if key.startswith('vehicles/')and '/normal/lod0/'in key and key.endswith('.model'):
                         parts=name.split('/');ident='/'.join(parts[1:3]).lower()
                         found[ident]=dict(key=ident,nation=parts[1].lower(),code=parts[2],label=parts[2].replace('_',' '),localization=None)
+        self.index_loaded=True
         # Localization is read from native vehicle lists, never from mod scripts.
         for nation,definition in NATIONS.items():
             name='scripts/item_defs/vehicles/'+definition+'/list.xml'
@@ -145,8 +224,6 @@ class Catalog(object):
                 ident=nation+'/'+node.tag.lower()
                 if ident in found:found[ident]['localization']=node.findtext('shortUserString')or node.findtext('userString')
         self.cars=sorted(found.values(),key=lambda row:row['key'])
-        self.scan_overrides()
-        return self
 
     def scan_overrides(self):
         """Index stock vehicle overrides without executing mod code or copying skins.
@@ -185,6 +262,7 @@ class Catalog(object):
         return hits
 
     def read(self,name):
+        self.ensure_index()
         key=path(name)
         if key is None or key.lower()not in self.index:raise ValueError('Missing native resource: '+str(name))
         source,entry,unused_crc,unused_size=self.index[key.lower()]
@@ -192,6 +270,7 @@ class Catalog(object):
         return self.archives[source].read(entry)
 
     def plan(self,vehicle,cancel=lambda:False):
+        self.ensure_index(cancel)
         if vehicle not in set(c['key']for c in self.cars):raise ValueError('Unknown native vehicle')
         prefix='vehicles/'+vehicle+'/';resources={};queue=[];shaders=set()
         def add(value,owner):
@@ -240,6 +319,8 @@ class Catalog(object):
         return base+sha(parent.lower().encode('utf-8'))[:16]+'/'+filename
 
     def prepare(self,vehicle,cancel=lambda:False,progress=lambda text:None):
+        if not self.index_loaded:progress(u'正在按需建立原版资源索引…')
+        self.ensure_index(cancel)
         ready=self.load_ready(vehicle)
         if ready is not None:return ready
         spec=self.plan(vehicle,cancel);key_hash=sha(vehicle.encode('utf-8'))[:12]
@@ -279,6 +360,7 @@ class Catalog(object):
         return result
 
     def load_ready(self,vehicle):
+        self.ensure_index()
         base=self.cache_rel+sha(vehicle.encode('utf-8'))[:12]+'/'
         folder=self.absolute(base)
         if not os.path.isdir(folder):return None

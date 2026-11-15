@@ -27,6 +27,49 @@ class CatalogTests(unittest.TestCase):
     def pkg(self):
         with zipfile.ZipFile(self.root/'res/packages/base.pkg','w')as z:
             for k,v in self.files.items():z.writestr(k,v)
+    def test_metadata_warm_start_opens_no_native_archives_and_preparation_is_deferred(self):
+        folder=self.root/'metadata';cold=Catalog(str(self.root)).scan(cache_dir=str(folder));self.addCleanup(cold.close)
+        with patch('zipfile.ZipFile',side_effect=AssertionError('warm startup reopened native ZIP')):
+            warm=Catalog(str(self.root)).scan(cache_dir=str(folder))
+        self.addCleanup(warm.close)
+        self.assertTrue(warm.metadata_cache_hit);self.assertFalse(warm.index_loaded);self.assertFalse(warm.index)
+        self.assertEqual(warm.cars,cold.cars)
+        record=warm.prepare('german/g197_test');self.assertTrue(warm.index_loaded)
+        self.assertEqual(len(record['models']),8)
+
+    def test_metadata_cache_invalidates_when_native_package_changes(self):
+        folder=self.root/'metadata';first=Catalog(str(self.root)).scan(cache_dir=str(folder));first.close()
+        self.catalog.close();self.files['extra-resource.txt']=b'changed native package';self.pkg()
+        changed=Catalog(str(self.root)).scan(cache_dir=str(folder));self.addCleanup(changed.close)
+        self.assertFalse(changed.metadata_cache_hit);self.assertTrue(changed.index_loaded)
+        self.assertNotEqual(changed.fingerprint,first.fingerprint)
+
+    def test_metadata_cache_invalidates_when_installed_override_changes(self):
+        folder=self.root/'metadata';mods=self.root/'mods';mods.mkdir()
+        def new_catalog():
+            c=Catalog(str(self.root));c.mod_roots=[str(mods)];self.addCleanup(c.close)
+            return c.scan(cache_dir=str(folder))
+        self.assertEqual(new_catalog().overridden,set())
+        with zipfile.ZipFile(mods/'new.wotmod','w')as z:z.writestr('res/'+self.base+'normal/lod0/Hull.model',b'custom')
+        added=new_catalog();self.assertFalse(added.metadata_cache_hit);self.assertEqual(added.overridden,{'german/g197_test'})
+        (mods/'new.wotmod').unlink()
+        removed=new_catalog();self.assertEqual(removed.overridden,set())
+
+    def test_corrupt_metadata_is_rebuilt_and_readonly_cache_does_not_block_startup(self):
+        folder=self.root/'metadata';first=Catalog(str(self.root)).scan(cache_dir=str(folder));first.close()
+        next(folder.glob('catalog2_*.json')).write_text('{invalid json')
+        rebuilt=Catalog(str(self.root)).scan(cache_dir=str(folder));self.addCleanup(rebuilt.close)
+        self.assertFalse(rebuilt.metadata_cache_hit);self.assertEqual(rebuilt.cars,self.catalog.cars)
+        with patch.object(Catalog,'_metadata',side_effect=OSError('cache directory unavailable')):
+            uncached=Catalog(str(self.root)).scan(cache_dir=str(folder))
+        self.addCleanup(uncached.close);self.assertEqual(uncached.cars,self.catalog.cars)
+
+    def test_cancelled_deferred_index_is_not_marked_ready(self):
+        folder=self.root/'metadata';first=Catalog(str(self.root)).scan(cache_dir=str(folder));first.close()
+        warm=Catalog(str(self.root)).scan(cache_dir=str(folder));self.addCleanup(warm.close)
+        with self.assertRaises(Paused):warm.ensure_index(cancel=lambda:True)
+        self.assertFalse(warm.index_loaded);self.assertEqual(warm.cars,self.catalog.cars)
+
     def test_eu_asia_each_detect_own_client_without_hardcoded_install_path(self):
         self.assertEqual(self.catalog.realm,'EU');self.assertEqual(len(self.catalog.cars),1)
         self.assertEqual(self.catalog.cars[0]['localization'],'#vehicles:test')

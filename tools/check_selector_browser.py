@@ -34,7 +34,8 @@ window.model={payload:'{}',onCommand:function(args){window.__nativeCommands++;va
 window.engine={whenReady:devRequest().then(function(state){window.model.payload=JSON.stringify(state);setInterval(function(){devRequest().then(s=>window.model.payload=JSON.stringify(s));},90);})};
 `});
 await call('Emulation.setDeviceMetricsOverride',{width:1120,height:780,deviceScaleFactor:1,mobile:false});await call('Page.navigate',{url:cfg.url});
-await until("document.querySelectorAll('.car-row').length>1000");let checks=[];
+await until("Number(document.getElementById('rows').getAttribute('data-total'))>1000");let checks=[];assert(await value("document.querySelectorAll('.car-row').length<40"),'virtual list created too many rows');checks.push('1000 vehicle list renders fewer than 40 rows');
+await value("window.__firstRow=document.querySelector('.car-row')");await nap(1100);assert(await value("window.__firstRow===document.querySelector('.car-row')"),'unchanged payload rebuilt the list');checks.push('unchanged payload retains row elements');
 await change('search','g197');await until("document.querySelectorAll('.car-row').length===1");assert(await value("document.querySelector('.car-row').dataset.key.includes('g197')"),'search code mismatch');checks.push('name/code search');
 await change('search','no-match-test-xyz');assert(await value("document.querySelectorAll('.car-row').length===0"),'empty search');checks.push('empty search');
 await change('search','');await change('nation','german');assert(await value("Array.from(document.querySelectorAll('.car-row')).every(e=>e.dataset.key.startsWith('german/'))"),'country filter');checks.push('country filter');
@@ -42,7 +43,8 @@ await dragRows(0,3);assert(await value("document.querySelectorAll('.car-row.sele
 await dragRows(5,6,true);assert(await value("document.querySelectorAll('.car-row.selected').length===6"),'Ctrl drag did not append');checks.push('Ctrl rectangle appends');
 await change('mode','2');await click('apply');await until("!document.getElementById('apply').disabled");assert(await value("Array.from(document.querySelectorAll('.car-row.selected .mode')).every(e=>e.textContent==='仅队友')"),'batch modes not saved');checks.push('batch ally setting');
 await click('clear-selection');assert(await value("document.querySelectorAll('.car-row.selected').length===0"),'clear selection');
-await click('select-all');assert(await value("document.querySelectorAll('.car-row.selected').length===document.querySelectorAll('.car-row').length"),'select filtered');checks.push('select all filtered country');
+await click('select-all');assert(await value("Number(document.getElementById('selection-count').textContent.match(/[0-9]+/)[0])===Number(document.getElementById('rows').getAttribute('data-total'))"),'select filtered must include rows outside the viewport');checks.push('select all filtered country');
+await value("document.getElementById('viewport').scrollTop=4200");await until("Number(document.querySelector('.car-row').getAttribute('data-index'))>30");assert(await value("document.querySelectorAll('.car-row').length<40&&Array.from(document.querySelectorAll('.car-row')).every(e=>e.classList.contains('selected'))"),'selection was lost when virtual rows were recycled');checks.push('recycled rows retain selections outside viewport');
 await change('nation','french');assert(await value("document.getElementById('selection-count').textContent.includes('当前结果 0')"),'hidden selection not retained');checks.push('selection retained across filters');
 await click('all-enemies');await until("!document.getElementById('all-enemies').disabled");await change('nation','');assert(await value("Array.from(document.querySelectorAll('.car-row .mode')).every(e=>e.textContent==='仅敌车')"),'global enemy quick action');checks.push('all enemy across every country');
 await click('clear-selection');await value("document.getElementById('viewport').scrollTop=0");

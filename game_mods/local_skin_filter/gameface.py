@@ -32,6 +32,12 @@ class SelectorView(ViewImpl):
         settings.flags=ViewFlags.VIEW;settings.model=SelectorModel()
         super(SelectorView,self).__init__(settings)
 
+    @property
+    def viewModel(self):
+        # ViewImpl exposes getViewModel(), not a viewModel attribute. Native
+        # generated views provide this property themselves.
+        return super(SelectorView,self).getViewModel()
+
     def _getEvents(self):
         return ((self.viewModel.onCommand,self.bridge.command),
                 (self.viewModel.onClose,self.bridge.close))

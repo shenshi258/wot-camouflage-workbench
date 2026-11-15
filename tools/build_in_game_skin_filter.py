@@ -8,7 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'game_mods/local_skin_filter'
-VERSION='2.1.2'
+VERSION='2.1.3'
 
 
 def digest(path):
@@ -56,6 +56,11 @@ def main():
                 methods=[c for c in walk(reader.obj())if c.name==method.encode('ascii')]
                 if not any(args.issubset(set(c.varnames[:c.argcount]))for c in methods):raise ValueError('Native WULF API changed')
                 ui_api[file]=hashlib.sha256(raw).hexdigest()
+            accessor_file='scripts/client/gui/impl/lobby/lootbox_system/base/info_page.pyc'
+            raw=catalog.read(accessor_file);reader=Reader(raw);reader.pos=8
+            accessors=[c for c in walk(reader.obj())if c.name==b'viewModel']
+            if not any(b'getViewModel'in c.names for c in accessors):raise ValueError('Native view model accessor changed')
+            ui_api[accessor_file]=hashlib.sha256(raw).hexdigest()
             if catalog.version.split()[0]!='v.2.4.1.1':raise ValueError('Native resource registration is verified for 2.4.1.1 only')
             for font in ('WarheliosZHCN-Medium.ttf','WarheliosZHCN-Bold.ttf'):
                 if ('gui/gameface/fonts/'+font).lower()not in catalog.index:raise ValueError('Native CJK font missing: '+font)
