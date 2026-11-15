@@ -8,7 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 ROOT=Path(__file__).resolve().parents[1]
 SOURCE=ROOT/'game_mods/local_skin_filter'
-VERSION='2.1.1'
+VERSION='2.1.2'
 
 
 def digest(path):
@@ -47,20 +47,26 @@ def main():
         with ClientCatalog(client).scan()as catalog:
             if catalog.realm!=realm:raise ValueError('Selected client realm mismatch: '+realm)
             api=check(catalog)
-            browser_raw=catalog.read('scripts/client/gui/game_control/BrowserController.pyc')
-            reader=Reader(browser_raw);reader.pos=8;methods=[c for c in walk(reader.obj())if c.name==b'load']
-            required={b'url',b'title',b'browserID',b'browserSize',b'useBrowserWindow',b'showCloseBtn',b'callback'}
-            if len(methods)!=1 or not required.issubset(methods[0].varnames[:methods[0].argcount]):raise ValueError('Game browser API changed')
-            native_browser=catalog.read('scripts/client/gui/impl/common/browser.pyc');reader=Reader(native_browser);reader.pos=8
-            if b'IBrowserController'not in reader.obj().names:raise ValueError('Native browser dependency binding changed')
+            # Read each installed client's native WULF view interfaces; no browser API is used.
+            ui_api={}
+            for file,method,args in [
+              ('gui/impl/pub/window_impl.pyc','__init__',{b'self',b'wndFlags'}),
+              ('gui/impl/pub/view_impl.pyc','_onLoading',{b'self'})]:
+                raw=catalog.read('scripts/client/'+file);reader=Reader(raw);reader.pos=8
+                methods=[c for c in walk(reader.obj())if c.name==method.encode('ascii')]
+                if not any(args.issubset(set(c.varnames[:c.argcount]))for c in methods):raise ValueError('Native WULF API changed')
+                ui_api[file]=hashlib.sha256(raw).hexdigest()
+            if catalog.version.split()[0]!='v.2.4.1.1':raise ValueError('Native resource registration is verified for 2.4.1.1 only')
+            for font in ('WarheliosZHCN-Medium.ttf','WarheliosZHCN-Bold.ttf'):
+                if ('gui/gameface/fonts/'+font).lower()not in catalog.index:raise ValueError('Native CJK font missing: '+font)
             records.append(dict(path=str(client.resolve()),realm=realm,version=catalog.version,appearance_api=api,
-              selector_browser_api_sha256=hashlib.sha256(browser_raw).hexdigest(),selector_browser_binding='dependency.instance(IBrowserController)',
+              selector_ui='native_gameface',selector_ui_api=ui_api,
               paths_xml_sha256=digest(client/'paths.xml'),version_xml_sha256=digest(client/'version.xml'),
               python27_sha256=digest(client/'win64/python27.dll'),actual_user_launch_confirmed=False))
     # These builds share verified appearance interfaces. The plugin reads each
     # client's own native resources and own vehicle list, not another realm's files.
     assert [x['sha256']for x in records[0]['appearance_api']]==[x['sha256']for x in records[1]['appearance_api']]
-    modules=('__init__','catalog','packed_xml','runtime','selector')
+    modules=('__init__','catalog','packed_xml','runtime','gameface')
     candidates=[]
     with tempfile.TemporaryDirectory(dir=ROOT/'.cache',prefix='filter20_compile_')as folder:
         work=Path(folder)
@@ -74,9 +80,8 @@ def main():
                 for name in modules:
                     compiled=work/(realm+'_'+name+'.pyc');compile27(SOURCE/(name+'.py'),compiled,client,'local_skin_filter2/'+name+'.py')
                     stored(z,'res/scripts/client/gui/mods/local_skin_filter/'+name+'.pyc',compiled.read_bytes())
-                assets=work/'panel_assets.py';assets.write_text('HTML = u'+ascii((SOURCE/'selector.html').read_text('utf-8'))+".encode('utf-8')\n",encoding='ascii')
-                compiled=work/(realm+'_panel_assets.pyc');compile27(assets,compiled,client,'local_skin_filter2/panel_assets.py')
-                stored(z,'res/scripts/client/gui/mods/local_skin_filter/panel_assets.pyc',compiled.read_bytes())
+                stored(z,'res/gui/gameface/mods/local_skin_filter/Selector.html',(SOURCE/'selector.html').read_bytes())
+                stored(z,'res/gui/gen_resources/local.skin_filter.json',(SOURCE/'selector_resources.json').read_bytes())
                 entry=work/'mod_entry.py';entry.write_bytes((SOURCE/'mod_entry.py.txt').read_bytes())
                 compiled=work/(realm+'_entry.pyc');compile27(entry,compiled,client,'local_skin_filter2/mod_entry.py')
                 stored(z,'res/scripts/client/gui/mods/mod_zz_local_skin_filter.pyc',compiled.read_bytes())

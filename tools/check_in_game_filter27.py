@@ -48,14 +48,48 @@ assert any(u'\u6d4b\u8bd5\u8f66\u578b'in row['label']for row in ctl.ui_rows)
 ctl.on_global(runtime.LINK,{'enabled':False});ctl.refresh_main();ctl.progress='different status';ctl.refresh_main()
 assert ctl.enabled is False
 ctl.on_global(runtime.LINK,{'enabled':True});ctl.publish(record['vehicle'],record);assert record['vehicle']in ctl.ready
-urls=[];ctl.browser=urls.append;ctl.open_selector();assert urls and ctl.panel.server.server_address[0]=='127.0.0.1'
-client=urllib2.build_opener(urllib2.ProxyHandler({}))
-request=urllib2.Request(ctl.panel.origin+'/api/state',headers={'X-LSF-Key':ctl.panel.token})
-snapshot=json.loads(client.open(request,timeout=3).read());assert len(snapshot['cars'])==len(c.cars)
-with open(os.path.join(out,'selector_delivered.html'),'wb')as f:f.write(ctl.panel.html)
-html_sha256=hashlib.sha256(ctl.panel.html).hexdigest()
-request=urllib2.Request(ctl.panel.origin+'/api/command',data=json.dumps({'kind':'all_enemies'}),headers={'X-LSF-Key':ctl.panel.token})
-answer=json.loads(client.open(request,timeout=3).read());ctl.busy=True;ctl.poll();assert all(ctl.rules[row['key']]==1 for row in c.cars)
+
+class Model(object):
+ def __init__(self,properties,commands):self.values=[];self._initialize()
+ def _initialize(self):pass
+ def _addStringProperty(self,key,value):self.values.append(value)
+ def _setString(self,index,value):self.values[index]=value
+ def _addCommand(self,name):return Event()
+ def transaction(self):return self
+ def __enter__(self):return self
+ def __exit__(self,*args):pass
+class ViewSettings(object):
+ def __init__(self,layout):self.layout=layout
+class View(object):
+ def __init__(self,settings):self.settings=settings;self.viewModel=settings.model
+ def _onLoading(self,*args,**kwargs):
+  for event,handler in self._getEvents():event+=handler
+ def _finalize(self):
+  for event,handler in self._getEvents():event-=handler
+windows=[]
+class Window(object):
+ def __init__(self,flags,content,layer):self.flags=flags;self.content=content;self.layer=layer;self.destroyed=False
+ def load(self):windows.append(self);self.content._onLoading()
+ def destroy(self):self.destroyed=True;self.content._finalize()
+wulf=mod('frameworks.wulf');mod('frameworks');sys.modules['frameworks.wulf']=wulf
+wulf.ViewModel=Model;wulf.ViewSettings=ViewSettings;wulf.ViewFlags=Obj();wulf.ViewFlags.VIEW=1
+wulf.WindowFlags=Obj();wulf.WindowFlags.WINDOW=1;wulf.WindowFlags.WINDOW_FULLSCREEN=2;wulf.WindowFlags.WINDOW_MODAL=4
+wulf.WindowLayer=Obj();wulf.WindowLayer.TOP_WINDOW=7
+mod('gui.impl');gen=mod('gui.impl.gen');gen.R=Obj();gen.R.mods=Obj();gen.R.mods.local_skin_filter=Obj()
+gen.R.mods.local_skin_filter.views=Obj();gen.R.mods.local_skin_filter.views.Selector=lambda:60001
+mod('gui.impl.pub');mod('gui.impl.pub.view_impl').ViewImpl=View;mod('gui.impl.pub.window_impl').WindowImpl=Window
+ctl.open_selector();assert ctl.panel is not None and len(windows)==1
+assert windows[-1].content.settings.layout==60001 and windows[-1].flags==7
+snapshot=json.loads(ctl.panel.view.viewModel.values[0]);assert len(snapshot['cars'])==len(c.cars)
+ctl.open_selector();assert len(windows)==1
+html=open(HTMLFILE,'rb').read();html_sha256=hashlib.sha256(html).hexdigest()
+ctl.panel.command({'payload':json.dumps({'ticket':1731666666666,'command':{'kind':'all_enemies'}})})
+ctl.busy=True;ctl.poll();assert all(ctl.rules[row['key']]==1 for row in c.cars)
+assert json.loads(ctl.panel.view.viewModel.values[0])['appliedTicket']==1731666666666
+count=ctl.events.qsize();ctl.panel.command({'payload':'{}'});ctl.panel.command({'payload':json.dumps({'ticket':1731666666666,'command':{}})})
+assert ctl.events.qsize()==count
+ctl.panel.close();assert windows[-1].destroyed and ctl.panel.window is None
+ctl.open_selector();assert len(windows)==2 and len(json.loads(ctl.panel.view.viewModel.values[0])['cars'])==len(c.cars)
 ctl.panel.stop();ctl.panel=None
 Parts=collections.namedtuple('Parts','chassis hull turret gun')
 class Names(object):ALL=('chassis','hull','turret','gun')
@@ -115,25 +149,8 @@ mod('vehicle_appearance');mod('vehicle_appearance.common_tank_appearance').Commo
 sys.modules['BigWorld']=world;sys.modules['ResMgr']=rm
 fresh_api=API();mod('gui.modsSettingsApi').g_modsSettingsApi=fresh_api
 menu=[];menu_api=Obj();menu_api.addModification=lambda **kw:menu.append(kw);mod('gui.modsListApi').g_modsListApi=menu_api
-browser_ctrl=Obj();opened=[];browser_ctrl.load=lambda **kw:opened.append(kw)
-# Use the real game dispatcher. A plain mock that appends on load() would hide
-# the precise 2.1 bug: adisp_async returns a callable without starting it.
-adisp_errors=[];debug=mod('debug_utils')
-debug.LOG_ERROR=lambda *args:adisp_errors.append('error')
-debug.LOG_WRAPPED_CURRENT_EXCEPTION=lambda *args:adisp_errors.append('exception')
-class SoftException(Exception):pass
-mod('soft_exception').SoftException=SoftException
-adisp=mod('adisp');exec marshal.loads(open(ADISP,'rb').read()[8:])in adisp.__dict__
-@adisp.adisp_async
-def deferred_browser(callback=None,**kwargs):
- opened.append(kwargs);callback('local_skin_filter_selector')
-browser_ctrl.load=deferred_browser
-unused=browser_ctrl.load(url='http://127.0.0.1/protocol-test')
-assert callable(unused)and not opened
-mod('skeletons');mod('skeletons.gui');mod('skeletons.gui.game_control').IBrowserController=object()
 messages=mod('gui.SystemMessages');messages.pushMessage=lambda *a,**kw:None;messages.SM_TYPE=Obj();messages.SM_TYPE.Information=1;gui.SystemMessages=messages
 helpers=mod('helpers');helpers.i18n=Obj();helpers.i18n.makeString=lambda value:value
-helpers.dependency=Obj();helpers.dependency.instance=lambda interface:browser_ctrl
 player.arena=None;original_getcwd=os.getcwd;os.getcwd=lambda:root
 entry={};exec marshal.loads(open(ENTRY,'rb').read()[8:])in entry
 assert runtime._installed and runtime._controller is not None
@@ -142,14 +159,14 @@ event=runtime._controller.events.get(timeout=30);assert event[0]=='catalog';runt
 os.getcwd=original_getcwd
 assert runtime._controller.catalog.realm==c.realm and not runtime._controller.ready
 assert len(menu)==1 and menu[0]['lobby']is True and menu[0]['login']is False
-menu[0]['callback']();assert opened and opened[0]['useBrowserWindow']is True and opened[0]['showActionBtn']is False
-assert not adisp_errors,adisp_errors
+before=len(windows);menu[0]['callback']();assert len(windows)==before+1 and runtime._controller.panel.view is not None
+assert len(json.loads(runtime._controller.panel.view.viewModel.values[0])['cars'])==len(c.cars)
 runtime.fini();assert runtime._controller.stopped
 result=dict(status='passed',realm=c.realm,version=c.version,vehicle_count=len(c.cars),cache_resources=len(record['resources']),
  model_paths=len(record['models']),cycles=100,modes=4,states=3,entry_pyc_executed=True,
  default_and_distinct_style_models=True,utf8_localization=True,own_kept=True,collision_getter_unchanged=True,
- selector_loopback_verified=True,selector_html_sha256=html_sha256,game_browser_call_verified=True,
- native_adisp_contract_verified=True,legacy_unawaited_call_reproduced=True,
+ selector_native_bridge_verified=True,selector_html_sha256=html_sha256,
+ native_gameface_contract_verified=True,close_reopen_verified=True,no_http_listener=True,
  preparation_output=out,game_process_started=False,whole_vehicle_loading=dict(status='not_tested'))
 with open(os.path.join(out,'native_result.json'),'wb')as f:f.write(json.dumps(result,sort_keys=True))
 c.close();runtime._controller.catalog.close()
@@ -166,6 +183,8 @@ def main():
             if not info.filename.endswith('.pyc'):continue
             rel=info.filename.removeprefix('res/scripts/client/');dest=extracted/rel
             dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(z.read(info))
+    htmlfile=a.output/'selector_delivered.html'
+    with zipfile.ZipFile(target)as z:htmlfile.write_bytes(z.read('res/gui/gameface/mods/local_skin_filter/Selector.html'))
     native=a.output/'native_selector.pyc'
     adisp=a.output/'native_adisp.pyc'
     with zipfile.ZipFile(client/'res/packages/scripts.pkg')as z:
@@ -173,7 +192,7 @@ def main():
         adisp.write_bytes(z.read('scripts/client_common/adisp.pyc'))
     code=PROBE
     for name,value in [('EXTRACT',extracted),('LIB',str(client/'res/packages/scripts.pkg')+'/scripts/common/Lib'),('CLIENT',client),
-       ('OUTPUT',a.output.resolve()),('NATIVE',native.resolve()),('ADISP',adisp.resolve()),('ENTRY',(extracted/'gui/mods/mod_zz_local_skin_filter.pyc').resolve())]:
+       ('OUTPUT',a.output.resolve()),('HTMLFILE',htmlfile.resolve()),('NATIVE',native.resolve()),('ADISP',adisp.resolve()),('ENTRY',(extracted/'gui/mods/mod_zz_local_skin_filter.pyc').resolve())]:
         code=code.replace(name,'u'+ascii(str(value)))
     source=a.output/'probe_py27.txt';source.write_text(code,encoding='ascii')
     helper="import ctypes,sys;d=ctypes.PyDLL(sys.argv[1]);ctypes.c_int.in_dll(d,'Py_NoSiteFlag').value=1;d.Py_Initialize();d.PyRun_SimpleString.argtypes=[ctypes.c_char_p];sys.exit(bool(d.PyRun_SimpleString(open(sys.argv[2],'rb').read())))"

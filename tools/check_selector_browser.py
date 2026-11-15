@@ -20,10 +20,20 @@ function call(method,params={}){return new Promise((resolve,reject)=>{const n=++
 async function value(expression){const r=await call('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error(r.exceptionDetails.text);return r.result.value;}
 async function until(expression){for(let n=0;n<80;n++){if(await value(expression))return;await nap(100);}throw Error('Condition failed: '+expression);}
 async function click(id){const b=await value(`(()=>{const r=document.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`);await call('Input.dispatchMouseEvent',{type:'mousePressed',x:b.x,y:b.y,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:b.x,y:b.y,button:'left',clickCount:1});}
-async function change(id,v){await value(`(()=>{let e=document.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(v)};e.dispatchEvent(new Event(${id==='search'?"'input'":"'change'"},{bubbles:true}));})()`);}
+async function change(id,v){if(id==='search'){await value(`(()=>{let e=document.getElementById('search');e.value=${JSON.stringify(v)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);return;}await click(id);let option=await value(`(()=>{let old=document.getElementById('test-choice');if(old)old.removeAttribute('id');let e=Array.from(document.querySelectorAll('#${id}-choices button')).find(e=>e.getAttribute('data-value')===${JSON.stringify(v)});e.id='test-choice';return !!e})()`);assert(option,'dropdown option missing');await click('test-choice');}
+
 async function dragRows(first,last,ctrl=false){const r=await value(`(()=>{let a=document.querySelectorAll('.car-row')[${first}].getBoundingClientRect(),b=document.querySelectorAll('.car-row')[${last}].getBoundingClientRect();return{x1:a.left+75,y1:a.top+7,x2:b.left+310,y2:b.bottom-7}})()`);await call('Input.dispatchMouseEvent',{type:'mousePressed',x:r.x1,y:r.y1,button:'left',clickCount:1,modifiers:ctrl?2:0});for(let n=1;n<=12;n++)await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:r.x1+(r.x2-r.x1)*n/12,y:r.y1+(r.y2-r.y1)*n/12,buttons:1,modifiers:ctrl?2:0});await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:r.x2,y:r.y2,button:'left',clickCount:1,modifiers:ctrl?2:0});}
 function assert(ok,msg){if(!ok)throw Error(msg);}
-await call('Page.enable');await call('Runtime.enable');await call('Emulation.setDeviceMetricsOverride',{width:1120,height:780,deviceScaleFactor:1,mobile:false});await call('Page.navigate',{url:cfg.url});
+await call('Page.enable');await call('Runtime.enable');
+// Test the delivered native-ViewModel branch. Only this development adapter
+// talks to the isolated test server; the installed game view has no listener.
+await call('Page.addScriptToEvaluateOnNewDocument',{source:`
+window.__nativeCommands=0;window.__ticketMap={};
+function devRequest(data){return fetch('/api/'+(data?'command':'state'),{method:data?'POST':'GET',headers:{'X-LSF-Key':${JSON.stringify(cfg.url.split('#')[1])},'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined}).then(r=>r.json()).then(function(r){if(!data&&r.appliedTicket)r.appliedTicket=window.__ticketMap[r.appliedTicket]||0;return r;});}
+window.model={payload:'{}',onCommand:function(args){window.__nativeCommands++;var value=JSON.parse(args.payload);devRequest(value.command).then(r=>window.__ticketMap[r.ticket]=value.ticket);},onClose:function(){window.__nativeClosed=true;}};
+window.engine={whenReady:devRequest().then(function(state){window.model.payload=JSON.stringify(state);setInterval(function(){devRequest().then(s=>window.model.payload=JSON.stringify(s));},90);})};
+`});
+await call('Emulation.setDeviceMetricsOverride',{width:1120,height:780,deviceScaleFactor:1,mobile:false});await call('Page.navigate',{url:cfg.url});
 await until("document.querySelectorAll('.car-row').length>1000");let checks=[];
 await change('search','g197');await until("document.querySelectorAll('.car-row').length===1");assert(await value("document.querySelector('.car-row').dataset.key.includes('g197')"),'search code mismatch');checks.push('name/code search');
 await change('search','no-match-test-xyz');assert(await value("document.querySelectorAll('.car-row').length===0"),'empty search');checks.push('empty search');
@@ -42,6 +52,8 @@ await change('nation','german');await change('search','pz');await click('clear-s
 let shot=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(cfg.screenshot,Buffer.from(shot.data,'base64'));
 await call('Emulation.setDeviceMetricsOverride',{width:800,height:600,deviceScaleFactor:1,mobile:false});
 assert(await value("(()=>{let b=document.getElementById('apply').getBoundingClientRect(),v=document.getElementById('viewport').getBoundingClientRect();return b.right<=innerWidth&&b.bottom<=innerHeight&&v.height>=80})()"),'compact layout clips actions');checks.push('800x600 layout keeps actions visible');
+assert(await value('window.__nativeCommands>0'),'native ViewModel commands were not used');checks.push('native ViewModel command branch');
+await click('close');assert(await value('window.__nativeClosed===true'),'native close command');checks.push('native close command');
 assert(errors.length===0,'Browser exceptions: '+errors.join(';'));
 fs.writeFileSync(cfg.result,JSON.stringify({status:'passed',checks,game_browser_rendering:'not_tested'},null,2));ws.close();
 '''
@@ -56,9 +68,9 @@ def main():
     from local_skin_filter.test_runtime import API
     from types import SimpleNamespace
     catalog=Catalog(str(a.client)).scan();world=SimpleNamespace(player=lambda:None,callback=lambda *args:1,cancelCallback=lambda *args:None)
-    controller=Controller(API(),world,SimpleNamespace(),browser=lambda url:None);controller.catalog=catalog;controller.register_cars();controller.busy=True
-    if a.html:controller.panel=PanelServer(controller.submit,html=a.html.read_bytes())
-    else:controller.panel=PanelServer(controller.submit)
+    controller=Controller(API(),world,SimpleNamespace());controller.catalog=catalog;controller.register_cars();controller.busy=True
+    html=a.html.read_bytes()if a.html else(ROOT/'game_mods/local_skin_filter/selector.html').read_bytes()
+    controller.panel=PanelServer(controller.submit,html=html)
     controller.update_panel()
     profile=a.output/('chrome_profile_'+uuid.uuid4().hex[:8]);profile.mkdir()
     browser=Path('C:/Program Files/Google/Chrome/Application/chrome.exe')

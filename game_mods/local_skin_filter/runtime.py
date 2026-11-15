@@ -64,7 +64,7 @@ def wrap_context(original,identify):
 
 
 class Controller(object):
-    def __init__(self,api,world,resmgr,root=None,notify=None,localize=None,browser=None):
+    def __init__(self,api,world,resmgr,root=None,notify=None,localize=None,panel_factory=None):
         self.api=api;self.world=world;self.resmgr=resmgr;self.root=root
         self.notify=notify or(lambda text:None);self.localize=localize or(lambda key:key)
         saved=api.getModData(LINK,2,dict(enabled=True,rules={}))
@@ -73,7 +73,7 @@ class Controller(object):
         self.ready={};self.catalog=None;self.error=None
         self.events=queue.Queue();self.cancel=threading.Event();self.busy=False;self.stopped=False
         self.attempted=set();self.callbacks={};self.progress=u'正在读取本区客户端车型…';self.job_id=None
-        self.browser=browser;self.panel=None;self.ui_rows=[];self.revision=0;self.panel_signature=None
+        self.panel_factory=panel_factory;self.panel=None;self.ui_rows=[];self.revision=0;self.panel_signature=None
         self.last_ticket=0;self.command_message='';self.command_error=''
 
     def in_battle(self):
@@ -120,7 +120,7 @@ class Controller(object):
         except Exception:LOG.exception('Settings status refresh failed')
 
     def register_cars(self):
-        # Localize on the game thread. HTTP workers receive plain data only.
+        # Localize on the game thread before publishing a data-only UI snapshot.
         rows=[]
         for car in self.catalog.cars:
             label=car['label']
@@ -183,11 +183,13 @@ class Controller(object):
     def open_selector(self):
         if self.in_battle():self.inform(u'请在车库打开搜索与框选窗口。');return
         try:
-            if self.browser is None:raise ValueError('Game browser unavailable')
             if self.panel is None:
-                from .selector import PanelServer
-                self.panel=PanelServer(self.submit)
-            self.update_panel();self.browser(self.panel.url)
+                factory=self.panel_factory
+                if factory is None:
+                    from .gameface import GamefacePanel
+                    factory=GamefacePanel
+                self.panel=factory(self);self.panel_signature=None
+            self.update_panel();self.panel.show()
         except Exception:
             LOG.exception('In-game selector unavailable')
             self.inform(u'选车窗口未能打开，原设置保持不变。')
@@ -205,6 +207,7 @@ class Controller(object):
     def poll(self):
         if self.stopped:return
         battle=self.in_battle()
+        if battle and self.panel is not None:self.panel.close()
         if battle or not self.enabled:self.cancel.set()
         try:
             while True:
@@ -307,29 +310,15 @@ def init():
         from vehicle_systems.CompoundAppearance import CompoundAppearance
         from gui import SystemMessages
         from helpers import i18n
-        from helpers import dependency
-        from skeletons.gui.game_control import IBrowserController
-        from adisp import adisp_process
-        @adisp_process
-        def browser(url):
-            # Native load() is adisp_async: it returns a deferred caller. Yield
-            # it through the game's dispatcher; merely calling it does no work.
-            try:
-                yield dependency.instance(IBrowserController).load(url=url,title=u'车型涂装屏蔽',showActionBtn=False,showWaiting=False,
-                  browserID='local_skin_filter_selector',browserSize=(1120,780),useBrowserWindow=True,
-                  showCloseBtn=True,isModal=False)
-            except Exception:
-                LOG.exception('Native selector window could not be opened')
-                controller.inform(u'选车窗口打开失败，请查看插件日志。')
         controller=Controller(g_modsSettingsApi,BigWorld,ResMgr,
-          notify=lambda text:SystemMessages.pushMessage(text.encode('utf-8'),type=SystemMessages.SM_TYPE.Information),localize=i18n.makeString,browser=browser)
+          notify=lambda text:SystemMessages.pushMessage(text.encode('utf-8'),type=SystemMessages.SM_TYPE.Information),localize=i18n.makeString)
         # Fail before installing hooks if the ordinary settings API is absent.
         controller.begin()
         install_hooks(controller,model_assembler,CommonTankAppearance,CompoundAppearance)
         g_modsListApi.addModification(id='local_skin_filter_selector',name=u'本地涂装屏蔽 · 搜索与框选',
           description=u'搜索、国家筛选、鼠标拖框与批量屏蔽敌我涂装。',icon='gui/maps/icons/modsSettingsApi/icon.png',enabled=True,login=False,lobby=True,callback=controller.open_selector)
         _controller=controller;_installed=True
-        LOG.info('In-game cosmetic filter 2.1.1 loaded; EU/ASIA adapter. Game validation: not_tested.')
+        LOG.info('In-game cosmetic filter 2.1.2 loaded; native Gameface EU/ASIA adapter. Game validation: not_tested.')
     except Exception:LOG.exception('In-game cosmetic filter unavailable; keep native appearance')
 
 

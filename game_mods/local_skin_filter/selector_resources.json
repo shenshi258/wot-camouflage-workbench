@@ -1,0 +1,11 @@
+[
+  {
+    "type": "Layout",
+    "id": "R.mods.local_skin_filter.views.Selector",
+    "path": "coui://gui/gameface/mods/local_skin_filter/Selector.html",
+    "parameters": {
+      "entrance": "Selector",
+      "impl": "gameface"
+    }
+  }
+]

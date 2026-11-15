@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Loopback-only UI bridge for the game's built-in browser. No game calls here."""
+"""Development preview server. Not included in the installed Gameface mod."""
 from __future__ import unicode_literals
 import binascii,json,os,threading
 try:
