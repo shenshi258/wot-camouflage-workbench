@@ -1,0 +1,3 @@
+# -*- coding: utf-8 -*-
+from gui.mods.local_skin_filter.runtime import init, fini
+init()

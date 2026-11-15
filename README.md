@@ -6,7 +6,7 @@
 
 Version 3.9 adds a scope choice for ordinary skins: all vehicles sharing the same resources (default), or only your vehicle. It applies to texture builds, 3D painting and conversion of existing ordinary skins, and is retained in drafts. Own-vehicle mode uses private resource paths and excludes UML, third-party scripts and shared-resource override packages. This controls local rendering only. In-game behavior remains untested; the garage flicker diagnostic is separate.
 
-另有独立实验工具 [本地涂装屏蔽 1.0](standalone/local_skin_filter/README.md)：从实际选择的 Wargaming 客户端提取独立原版资源，在游戏内按敌车／队友及车型选择原版外观，保留自己的涂装。它处理原版路径替换，不保证移除 UML／AE／第三方脚本独立挂载物；需另装 ModsSettings API 及 ModsList API。所有生成包均待游戏内实测，尚未获得官方审核，不能保证反作弊零误报；本次没有发布远程 Release，也不包含旧 AE 闪烁修复。
+另有独立 [本地涂装屏蔽 2.0 游戏内插件](game_mods/local_skin_filter/README.md)：直接安装 `.wotmod`，在游戏内按车型分别选择不屏蔽、仅敌车、仅队友或敌我都屏蔽，保留自己的涂装。插件自行读取当前欧服／亚服原版资源并准备独立缓存，无需桌面工具。需 ModsSettings API 及 ModsList API；UML／AE／第三方脚本独立挂载物暂不保证屏蔽。欧服 2.4.1.1 #993 和亚服 #991 完成离线检查，游戏内效果仍待实测；未经官方审核，不保证反作弊零误报。本次没有发布远程 Release，也不包含旧 AE 闪烁修复。
 
 ## English
 
