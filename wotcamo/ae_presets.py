@@ -16,7 +16,7 @@ SUFFIX = '.aepreset'
 # Vehicle-specific placement and selection belong to the open project, never a preset.
 BASE_SETTINGS = ('fps', 'width', 'brightness', 'plane', 'angle', 'blend',
             'lift', 'uv_scale', 'u_offset', 'v_offset')
-SETTINGS = BASE_SETTINGS + ('uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','tint_color','tint_strength','contrast','transparency','fit_mode','tile_repeat') + ae.WARPS
+SETTINGS = BASE_SETTINGS + ('uv_scale_x','uv_scale_y','crop_left','crop_right','crop_top','crop_bottom','tint_color','tint_strength','contrast','transparency','fit_mode','tile_repeat','surface_lift','animation') + ae.WARPS
 CLIP_KEYS = ('schema', 'atlas_sha256', 'size', 'frame_size', 'packed_frame_size',
              'rects', 'frames', 'alpha')
 MAX_ARCHIVE = ae.MAX_BYTES + 256 * 1024
@@ -127,11 +127,25 @@ def scan(directory=None):
     return sorted(records, key=lambda item: item['name'].casefold()), issues
 
 
+def _playback_stats(record):
+    """Describe authored playback without baking or changing preset metadata."""
+    c=ae.config(record['config']);clip=record['clip'];nodes=c['animation']['nodes']
+    count=math.ceil(c['animation']['duration']*c['fps']-1e-9) if nodes else clip['frames']
+    return dict(fps=c['fps'],source_frames=clip['frames'],source_seconds=clip['frames']/c['fps'],
+                frames=count,seconds=count/c['fps'],nodes=len(nodes),valid=not nodes or count<=ae.MAX_FRAMES)
+
+
 def summary(record):
     """A bounded, two-line caption keeps long notes out of the main layout."""
     clip=record['clip'];c=record['config']
     blend='发光叠加' if c['blend']=='add' else '普通透明'
-    detail='%d 帧 · %g FPS · %g 秒 · %d×%d · %s'%(clip['frames'],c['fps'],clip['frames']/c['fps'],*clip['frame_size'],blend)
+    stats=_playback_stats(record)
+    if stats['nodes']:
+        timing=('节点动画 %d 帧 · %g 秒'%(stats['frames'],stats['seconds']) if stats['valid'] else
+                '节点动画无效：%d 帧，超过 %d 帧'%(stats['frames'],ae.MAX_FRAMES))
+        detail=timing+' · 源素材 %d 帧 · %g FPS · %d×%d · %s'%(clip['frames'],c['fps'],*clip['frame_size'],blend)
+    else:
+        detail='%d 帧 · %g FPS · %g 秒 · %d×%d · %s'%(clip['frames'],c['fps'],clip['frames']/c['fps'],*clip['frame_size'],blend)
     description=str(record.get('description') or '').strip()
     first=description.splitlines()[0][:72] if description else '可在“管理 / 导入…”查看预设说明。'
     return detail+'\n'+first+' 套用保留当前位置与选区。'
@@ -141,7 +155,13 @@ def description_text(record):
     """Portable notes are stored in the preset itself, not in vehicle settings."""
     if not record:return '选择左侧预设，查看用途、摆放和配色建议；可导出为独立 .aepreset。'
     c=record['config'];clip=record['clip']
-    heading='%s\n%d 帧 / %g FPS / %g 秒；素材 %d×%d；基准宽度 %g 米。'%(record['name'],clip['frames'],c['fps'],clip['frames']/c['fps'],*clip['frame_size'],c['width'])
+    stats=_playback_stats(record)
+    if stats['nodes']:
+        timing=('节点动画 %d 帧 / %g FPS / %g 秒。'%(stats['frames'],stats['fps'],stats['seconds']) if stats['valid'] else
+                '节点动画无效：需要 %d 帧，超过 %d 帧；请缩短时长或降低帧率。'%(stats['frames'],ae.MAX_FRAMES))
+        heading=record['name']+'\n'+timing+'\n源素材 %d 帧 / %g 秒；素材 %d×%d；基准宽度 %g 米。'%(clip['frames'],stats['source_seconds'],*clip['frame_size'],c['width'])
+    else:
+        heading='%s\n%d 帧 / %g FPS / %g 秒；素材 %d×%d；基准宽度 %g 米。'%(record['name'],clip['frames'],c['fps'],clip['frames']/c['fps'],*clip['frame_size'],c['width'])
     body=str(record.get('description') or '').strip() or '这个自定义预设没有填写说明。可先套用，再调节颜色、长宽和位置。'
     return heading+'\n\n'+body
 
@@ -156,15 +176,35 @@ def load(path, folder):
     return data, clip
 
 
+def _poster_frame(original, clip, config):
+    image=ae.appearance_rgba(original,config)
+    rect=clip['rects'][clip['frames']//2]
+    crop=(math.floor(rect[0]*image.width),math.floor(rect[1]*image.height),
+          math.ceil(rect[2]*image.width),math.ceil(rect[3]*image.height))
+    return image.crop(crop).convert('RGBA')
+
+
 def poster(path, size=(280, 180)):
-    """Show an actual middle frame with the preset's additive/alpha blend."""
-    data, atlas = read(path)
-    with Image.open(io.BytesIO(atlas)) as original:
-        image=ae.appearance_rgba(original,data['config'])
-        rect = data['clip']['rects'][data['clip']['frames']//2]
-        crop = (math.floor(rect[0]*image.width), math.floor(rect[1]*image.height),
-                math.ceil(rect[2]*image.width), math.ceil(rect[3]*image.height))
-        frame = image.crop(crop).convert('RGBA')
+    """Composite the actual playback midpoint, including authored node motion.
+
+    Keep the existing RGB/size API. A transparent midpoint remains background;
+    choosing another visible frame would hide the authored fade. Any node cache
+    is private temporary data and never changes the preset or its source atlas.
+    """
+    data, atlas = read(path);stats=_playback_stats(data)
+    if not stats['valid']:
+        raise ValueError('节点动画需要 %d 帧，最多 %d 帧；请缩短时长或降低帧率。'%(stats['frames'],ae.MAX_FRAMES))
+    if stats['nodes']:
+        import tempfile
+        with tempfile.TemporaryDirectory(prefix='wot_ae_poster_') as temporary:
+            folder=Path(temporary);source=folder/'source.png';source.write_bytes(atlas)
+            clip=dict(data['clip'],atlas=str(source.resolve()))
+            playback=ae.playback_clip(clip,data['config'],folder/'playback')
+            with Image.open(playback['atlas']) as original:
+                frame=_poster_frame(original,playback,data['config'])
+    else:
+        with Image.open(io.BytesIO(atlas)) as original:
+            frame=_poster_frame(original,data['clip'],data['config'])
     import numpy as np
     frame.thumbnail(size, Image.Resampling.LANCZOS)
     rgba = np.asarray(frame, dtype=float)/255

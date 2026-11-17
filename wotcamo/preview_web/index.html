@@ -26,7 +26,7 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 </div>
 <div id="paintTools" hidden>
 <span class="step">点击模型表面</span><label>导入图片 <input id="paintFile" type="file" accept="image/png,image/jpeg,image/webp"></label>
-<button id="paintLibrary" type="button" aria-expanded="false" title="批量导入自己的图片，按缩略图选取并重复使用。">图片素材库</button>
+<button id="paintLibrary" type="button" aria-expanded="false" title="自行导入图片和 GIF，按缩略图复用；此处贴图只使用 GIF 首帧，完整动画请在 AE 编辑器的素材库中使用。">图片 / GIF 素材库…</button>
 <label>大小 <input id="paintScale" type="range" min="0.01" max="1" step="0.01" value="0.2"><span id="paintScaleValue">20%</span></label>
 <label>角度 <input id="paintAngle" type="range" min="-180" max="180" step="1" value="0"><span id="paintAngleValue">0°</span></label>
 <button id="paintSave" title="固定当前图片的位置，继续添加下一张；Ctrl+S。关闭前请生成涂装包。">保存当前贴图（Ctrl+S）</button><span id="paintCount">已保存 0 张</span>
@@ -58,7 +58,7 @@ footer{padding:8px 18px;color:#9db1ca;font-size:12px;border-top:1px solid #27395
 <label title="范围 0～100%。0% 保留素材透明度，100% 完全透明；发光叠加也会减弱。">透明度（%） <input data-ae-appearance="transparency" type="range" min="0" max="100" step="0.01" value="0"><output>0.00%</output></label>
 <button id="aeAppearanceReset" title="恢复亮度 1 倍、对比度 1 倍、透明度 0%；保留素材、着色、位置和双侧设置。">重置亮度、对比度与透明度</button>
 </div>
-<div id="viewport"><div id="selectionRect"></div><div id="message">正在读取模型与贴图，首次加载会建立缓存…</div><div id="stats"></div><aside id="libraryPanel" hidden aria-label="图片素材库"></aside></div>
+<div id="viewport"><div id="selectionRect"></div><div id="message">正在读取模型与贴图，首次加载会建立缓存…</div><div id="stats"></div><aside id="libraryPanel" hidden aria-label="图片 / GIF 素材库"></aside></div>
 <footer><details id="operationHelp"><summary>操作说明</summary><div id="operationHelpText">旋转模型确认目标灯面，再点击或框选。Shift 加选，Ctrl 减选。配方在灯效窗口调整，修改后回到这里观察。</div></details><details id="notes"><summary>预览说明与资源提示</summary><div>基础材质与泛光为近似显示，不执行游戏原生着色器。当前展示静止履带；姿态控制为预览操作。游戏整车、LOD 与开镜状态仍须实测。</div><div id="warnings"></div></details><span id="hint">左键旋转 · 右键平移 · 滚轮缩放 · 点击灯面选取 · 框选模式按住左键拖动，Shift 加选 / Ctrl 减选（包含遮挡面）</span></footer>
 <script>
 // One persisted preference is shared with every editor and preview session.

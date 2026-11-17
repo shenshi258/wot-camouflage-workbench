@@ -2,7 +2,7 @@
 import bisect,math
 from pathlib import Path
 import numpy as np
-from PIL import Image,UnidentifiedImageError
+from PIL import Image,ImageOps,UnidentifiedImageError
 from . import ae_effects as ae
 
 VIDEO_SUFFIXES={'.mp4','.mov','.webm','.avi','.mkv','.m4v'}
@@ -11,6 +11,23 @@ MAX_FILE_BYTES=2*1024**3
 MAX_GIF_BYTES=128*1024**2
 MAX_GIF_FRAMES=4096
 MAX_GIF_PIXELS=512*1024**2
+
+
+def import_picture(path,destination):
+    """A still image is a one-frame element; nodes can animate it afterwards."""
+    p=Path(path)
+    if not p.is_file() or not 0<p.stat().st_size<=8*1024**2:raise ValueError('图片不存在或超过 8 MB。')
+    try:
+        with Image.open(p) as image:
+            if image.format not in ('PNG','JPEG','WEBP') or getattr(image,'n_frames',1)!=1:raise ValueError('请选择静态 PNG、JPG、WebP；GIF 请使用动画导入。')
+            if image.width*image.height>25000000:raise ValueError('图片不能超过 2500 万像素。')
+            frame=ImageOps.exif_transpose(image).convert('RGBA');original_size=frame.size
+            frame.thumbnail((512,512),Image.Resampling.LANCZOS)
+    except (OSError,UnidentifiedImageError,Image.DecompressionBombError) as error:raise ValueError('图片无法读取。') from error
+    clip=ae.pack_frames([frame],destination,allow_opaque=True)
+    ratio=min(1.,4096/max(original_size));clip['frame_size']=[max(1,round(v*ratio)) for v in original_size]
+    clip['import_info']=dict(kind='image',source_name=p.name,source_size=list(original_size),frames=1,alpha_mode='preserve')
+    return clip
 
 
 def local_file(path):

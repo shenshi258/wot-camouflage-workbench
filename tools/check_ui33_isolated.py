@@ -39,7 +39,7 @@ def main():
     for module in (ui_theme,gui,ae_gui,light_gui):
         assert Path(module.__file__).resolve().is_relative_to(program)
     names=['tests.test_ui_bugfix33','tests.test_ui_review34','tests.test_ui_consistency','tests.test_unified31',
-           'tests.test_ae_gui','tests.test_light_responsive','tests.test_light_tooltips']
+           'tests.test_ae_gui','tests.test_ae_nodes_gui','tests.test_light_responsive','tests.test_light_tooltips']
     # Synthetic error recovery and empty AE projects must not leave error logs
     # or caches in the delivered program, nor change the user's preferences.
     cache=source/'.cache';cache.mkdir(exist_ok=True)
@@ -49,7 +49,7 @@ def main():
             result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromNames(names))
     print('TESTED_PROGRAM',program,flush=True)
     print('ISOLATED_UI_SUITE',result.testsRun,len(result.failures),len(result.errors),flush=True)
-    return 0 if result.testsRun==49 and result.wasSuccessful() else 1
+    return 0 if result.testsRun==55 and result.wasSuccessful() else 1
 
 
 if __name__=='__main__':raise SystemExit(main())

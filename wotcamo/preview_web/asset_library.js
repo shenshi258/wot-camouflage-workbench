@@ -5,15 +5,16 @@ export class AssetLibrary{
   this.root=root;this.base=base;this.onUse=onUse;this.onClose=onClose;this.isBusy=isBusy;
   this.items=[];this.selected=null;this.busy=false;this.removed=null;this.revision=0;this.useRevision=0;
   root.classList.add('asset-library');
-  root.innerHTML=`<div class="asset-toolbar"><div class="asset-heading"><strong>图片素材库</strong><button data-lib="close" type="button" aria-label="关闭素材库">关闭</button></div>
-   <div class="asset-actions"><button data-lib="import" class="asset-primary" type="button">导入图片…</button><button data-lib="folder" type="button">导入文件夹…</button><button data-lib="refresh" type="button">刷新</button></div>
-   <input data-lib="files" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" multiple hidden>
+  root.innerHTML=`<div class="asset-toolbar"><div class="asset-heading"><strong>图片 / GIF 素材库</strong><button data-lib="close" type="button" aria-label="关闭素材库">关闭</button></div>
+   <div class="asset-actions"><button data-lib="import" class="asset-primary" type="button">导入图片 / GIF…</button><button data-lib="folder" type="button">导入文件夹…</button><button data-lib="refresh" type="button">刷新</button></div>
+   <input data-lib="files" type="file" accept="image/png,image/jpeg,image/webp,image/gif,.png,.jpg,.jpeg,.webp,.gif" multiple hidden>
    <input data-lib="directory" type="file" webkitdirectory multiple hidden>
    <label class="asset-category-import">导入分类 <input data-lib="importCategory" maxlength="40" value="未分类" aria-label="导入分类"></label></div>
    <div class="asset-filters"><input data-lib="search" placeholder="搜索名称或分类" aria-label="搜索素材"><select data-lib="category" aria-label="筛选分类"><option value="">全部分类</option></select></div>
-   <div data-lib="status" class="asset-status" role="status" aria-live="polite">图片保存在程序目录的“素材库/图片元素”，再次打开仍可使用。</div>
+   <div data-lib="status" class="asset-status" role="status" aria-live="polite">图片和 GIF 保存在程序目录的“素材库/图片元素”，再次打开仍可使用。</div>
    <div data-lib="grid" class="asset-grid" aria-label="素材缩略图"></div>
-   <div data-lib="chosen" class="asset-selected" hidden><div class="asset-chosen"><img data-lib="chosenImage" class="asset-chosen-image" alt="选中素材"><div class="asset-chosen-meta"><strong data-lib="chosenName"></strong><small data-lib="chosenSize"></small></div><button data-lib="use" class="asset-primary" type="button"></button></div>
+   <div data-lib="chosen" class="asset-selected" hidden><div class="asset-chosen"><img data-lib="chosenImage" class="asset-chosen-image" alt="选中素材"><div class="asset-chosen-meta"><strong data-lib="chosenName"></strong><small data-lib="chosenSize"></small></div><button data-lib="watch" type="button" hidden>播放 GIF</button><button data-lib="use" class="asset-primary" type="button"></button></div>
+   <p data-lib="animationNote" class="asset-animation-note" hidden></p>
    <details class="asset-edit"><summary>编辑名称 / 分类</summary><label>名称 <input data-lib="name" maxlength="100" aria-label="素材名称"></label><label>分类 <input data-lib="editCategory" maxlength="40" aria-label="素材分类"></label><div class="asset-actions"><button data-lib="save" type="button">保存修改</button><button data-lib="remove" type="button">移出素材库</button></div></details></div>
    <div class="asset-actions" style="padding:0 10px 8px"><button data-lib="undo" type="button" hidden>撤销移出</button></div>
    <dialog data-lib="preview"><button data-lib="previewClose" type="button">关闭预览</button><img data-lib="largeImage" alt="素材大图"></dialog>`;
@@ -23,9 +24,9 @@ export class AssetLibrary{
   for(const key of ['files','directory'])this.el(key).onchange=()=>{const files=Array.from(this.el(key).files);this.el(key).value='';this.importFiles(files);};
   this.el('refresh').onclick=()=>this.load().catch(error=>this.error(error));
   for(const key of ['search','category'])this.el(key).addEventListener(key==='search'?'input':'change',()=>this.renderGrid());
-  this.el('use').onclick=()=>this.use();this.el('save').onclick=()=>this.edit();this.el('remove').onclick=()=>this.remove();this.el('undo').onclick=()=>this.restore();
-  this.el('previewClose').onclick=()=>this.el('preview').close();
-  const help={import:'多选 PNG / JPG / WebP，每批最多 128 张；保存副本，原图保留。',folder:'导入文件夹及子文件夹内的图片，每批最多 128 张。',refresh:'读取其他窗口新增或修改的素材。',importCategory:'新素材使用此分类；重复文件保留库内已有分类。',search:'按名称或分类筛选，不修改已放置到车身的图案。',category:'只筛选显示；修改分类请展开下方编辑区域。',name:'显示名称，最多 100 个字符；不改原始文件名。',editCategory:'分类最多 40 个字符，留空为未分类。',save:'保存名称和分类，不改图片内容。',remove:'移到图库回收站，保留原图和已经放置的图案。',undo:'撤销本窗口最近一次移出；回收副本仍保留在库目录。',use:onUse?'载入为当前贴图；保存当前贴图后可以继续添加。':'放大查看素材及透明边缘。',previewClose:'关闭大图预览，返回素材库。'};
+  this.el('use').onclick=()=>this.use();this.el('watch').onclick=()=>this.preview();this.el('save').onclick=()=>this.edit();this.el('remove').onclick=()=>this.remove();this.el('undo').onclick=()=>this.restore();
+  this.el('previewClose').onclick=()=>this.el('preview').close();this.el('preview').addEventListener('close',()=>this.el('largeImage').removeAttribute('src'));
+  const help={import:'多选 PNG / JPG / WebP / GIF，每批最多 128 项，单项最多 8 MB；保留原文件副本。',folder:'导入文件夹及子文件夹内的图片和 GIF，每批最多 128 项。',refresh:'读取其他窗口新增或修改的素材。',importCategory:'新素材使用此分类；重复文件保留库内已有分类。',search:'按名称或分类筛选，不修改已放置到车身的图案。',category:'只筛选显示；修改分类请展开下方编辑区域。',name:'显示名称，最多 100 个字符；不改原始文件名。',editCategory:'分类最多 40 个字符，留空为未分类。',save:'保存名称和分类，不改图片内容。',remove:'移到图库回收站，保留原图和已经放置的图案。',undo:'撤销本窗口最近一次移出；回收副本仍保留在库目录。',watch:'播放完整 GIF，保留原来的帧延时和透明效果。',use:onUse?'载入为当前静态贴图；GIF 只使用首帧。完整动画请从 AE 素材库使用。':'放大查看图片或播放完整 GIF。',previewClose:'关闭大图预览，返回素材库。'};
   for(const [key,text] of Object.entries(help))this.el(key).title=text;
  }
  el(name){return this.root.querySelector(`[data-lib="${name}"]`);}
@@ -43,7 +44,7 @@ export class AssetLibrary{
   for(const category of Array.from(new Set(this.items.map(item=>item.category))).sort((a,b)=>a.localeCompare(b,'zh')))this.el('category').add(new Option(category,category));
   this.el('category').value=Array.from(this.el('category').options).some(option=>option.value===current)?current:'';
   this.renderGrid();this.select(this.items.find(item=>item.id===select)||null);
-  this.message(`共 ${this.items.length} 项 · 单张最多 8 MB · PNG / JPG / WebP`+(result.issues?`；${result.issues} 项记录无法读取。`:''));
+  this.message(`共 ${this.items.length} 项 · 单项最多 8 MB · PNG / JPG / WebP / GIF`+(result.issues?`；${result.issues} 项记录无法读取。`:''));
  }
  renderGrid(){
   const query=this.el('search').value.trim().toLocaleLowerCase(),category=this.el('category').value;
@@ -54,33 +55,39 @@ export class AssetLibrary{
    button.title=`${item.name}\n${item.category} · ${item.width}×${item.height}`;button.setAttribute('aria-pressed',String(this.selected?.id===item.id));
    const image=document.createElement('img');image.src=this.url('library/thumb/'+item.id);image.loading='lazy';image.alt='';
    const text=document.createElement('span');text.textContent=item.name;button.append(image,text);
+   if(item.format==='GIF'){const badge=document.createElement('b');badge.className='asset-gif-badge';badge.textContent='GIF';button.append(badge);}
    button.onclick=()=>this.select(item);button.ondblclick=()=>{this.select(item);this.use();};button.disabled=this.busy;grid.append(button);
   }
-  if(!visible.length){const empty=document.createElement('div');empty.className='asset-empty';empty.textContent=this.items.length?'没有匹配的素材，请调整名称或分类筛选。':'还没有图片素材。可自行批量导入标志、文字、线条等图片，透明 PNG 可保留透明背景。';grid.append(empty);}
+  if(!visible.length){const empty=document.createElement('div');empty.className='asset-empty';empty.textContent=this.items.length?'没有匹配的素材，请调整名称或分类筛选。':'还没有素材。可自行导入图片和 GIF，保存后再次打开仍可复用；透明 PNG 与 GIF 保留透明背景。';grid.append(empty);}
  }
  select(item){
   this.selected=item;this.el('chosen').hidden=!item;
   for(const button of this.el('grid').querySelectorAll('[data-asset-id]'))button.setAttribute('aria-pressed',String(button.dataset.assetId===item?.id));
   if(item){
-   this.el('chosenImage').src=this.url('library/thumb/'+item.id);this.el('chosenName').textContent=item.name;
+   this.el('chosenImage').src=this.url('library/'+(item.format==='GIF'?'image/':'thumb/')+item.id);this.el('chosenName').textContent=item.name;
    this.el('chosenName').title=item.name;
-   this.el('chosenSize').textContent=`${item.width}×${item.height} · ${item.category}`;
+   this.el('chosenSize').textContent=`${item.width}×${item.height} · ${item.category}`+(item.format==='GIF'?` · ${item.frames} 帧 / ${Number(item.duration).toFixed(2)} 秒`:'');
    this.el('chosenSize').title=this.el('chosenSize').textContent;
    this.el('name').value=item.name;this.el('editCategory').value=item.category;
   }
+  this.el('watch').hidden=!item||item.format!=='GIF';
+  this.el('animationNote').hidden=!item||item.format!=='GIF';
+  this.el('animationNote').textContent=this.onUse?'三维贴图仅使用 GIF 首帧。完整动画请在 AE 编辑器的素材库中使用。':'GIF 原文件已完整保存；可在此播放，或从 AE 编辑器的素材库导入动画。';
+  this.el('use').textContent=this.onUse?(item?.format==='GIF'?'使用首帧':'使用素材'):'放大预览';
+  if(!item)this.el('chosenImage').removeAttribute('src');
   this.updateButtons();
  }
  updateButtons(){
   this.root.setAttribute('aria-busy',String(this.busy));
   for(const key of ['import','folder','refresh','files','directory','importCategory','name','editCategory','save','remove','undo'])this.el(key).disabled=this.busy;
-  this.el('use').disabled=this.busy||!this.selected||this.isBusy();this.el('undo').hidden=!this.removed;
+  this.el('use').disabled=this.busy||!this.selected||this.isBusy();this.el('watch').disabled=this.busy||!this.selected;this.el('undo').hidden=!this.removed;
   for(const button of this.el('grid').querySelectorAll('button'))button.disabled=this.busy;
  }
  async importFiles(files){
   if(this.busy||!files.length)return;
-  const supported=files.filter(file=>/\.(png|jpe?g|webp)$/i.test(file.name));
-  if(!supported.length){this.message('请选择 PNG、JPG 或 WebP 图片；动画可用 AE 的 GIF / 视频导入。');return;}
-  if(supported.length>128){this.message('单次最多导入 128 张图片，请分批选择。');return;}
+  const supported=files.filter(file=>/\.(png|jpe?g|webp|gif)$/i.test(file.name));
+  if(!supported.length){this.message('请选择 PNG、JPG、WebP 或 GIF 素材。');return;}
+  if(supported.length>128){this.message('单次最多导入 128 项素材，请分批选择。');return;}
   this.busy=true;this.updateButtons();let added=0,duplicates=0,last=null;const errors=[];
   try{
    for(const [index,file] of supported.entries()){
@@ -104,10 +111,22 @@ export class AssetLibrary{
   try{
    if(this.onUse){
     const response=await fetch(this.url('library/image/'+item.id));if(!response.ok)throw Error('图片读取失败，可先移出该项后重新导入。');
-    const blob=await response.blob();if(revision!==this.useRevision)return;
-    const used=await this.onUse(blob,item);if(used!==false&&revision===this.useRevision)this.message('已载入“'+item.name+'”，点击模型放置；保存当前贴图后可继续添加。');
-   }else{this.el('largeImage').src=this.url('library/image/'+item.id);this.el('largeImage').alt=item.name;this.el('preview').showModal();}
+    let blob=await response.blob();if(revision!==this.useRevision)return;
+    if(item.format==='GIF'){
+     // ImageBitmap decodes the first GIF frame; canvas output cannot keep
+     // advancing while the painting editor prepares its static texture.
+     const frame=await createImageBitmap(blob),canvas=document.createElement('canvas');canvas.width=frame.width;canvas.height=frame.height;
+     canvas.getContext('2d').drawImage(frame,0,0);frame.close();blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+     if(!blob)throw Error('GIF 首帧读取失败，请在 AE 素材库使用完整动画。');
+     if(revision!==this.useRevision)return;
+    }
+    const used=await this.onUse(blob,item);if(used!==false&&revision===this.useRevision)this.message('已载入“'+item.name+'”'+(item.format==='GIF'?'的首帧作为静态贴图；完整动画请从 AE 素材库使用。':'，点击模型放置；保存当前贴图后可继续添加。'));
+   }else this.preview();
   }catch(error){if(revision===this.useRevision)this.error(error);}
+ }
+ preview(){
+  if(!this.selected||this.busy)return;
+  this.el('largeImage').src=this.url('library/image/'+this.selected.id);this.el('largeImage').alt=this.selected.name;this.el('preview').showModal();
  }
  async edit(){
   if(!this.selected||this.busy)return;this.busy=true;this.updateButtons();

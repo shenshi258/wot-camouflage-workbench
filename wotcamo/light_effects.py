@@ -847,6 +847,19 @@ def build(project, client, output_dir, title='自定义灯效', log=lambda x: No
         note='brightness_min/max 仅为配方明暗倍率的计算范围，并非最终像素亮度。min=max 仅表示没有倍率起伏；换色、贴图、混合和游戏渲染仍可能改变观感亮度。保留模型按记录的配方估算，未重新执行其材质。')
     if project.get('recovery') and retained:
         report['breathing_audit']['retained_note']='%d 个未勾选的成品恢复模型沿用原包资源，配方改动不会影响它们的亮度。' % len(retained)
+    introduced_missing=audit.get('introduced_missing_dependencies',[])
+    if introduced_missing:
+        # Keep both the failed bytes and a hash-bound record for diagnosis.
+        # Existing source-package omissions are reported separately by the
+        # auditor and must not be blamed on this rebuild.
+        report['artifact']['path']=str(staged)
+        report['file_validation']=dict(audit,status='failed')
+        report['offline_validation']['status']='failed'
+        report['build_status']='failed'
+        report['failure']=dict(stage='dependency_validation',
+                               introduced_missing_dependencies=introduced_missing)
+        write_json(out/'验证记录.json',report)
+        raise ValueError('新增或修改的灯效资源缺少依赖，已保留失败产物和验证记录：'+', '.join(introduced_missing))
     write_json(out/'验证记录.json',report)
     (out/'使用说明.txt').write_text('此包为待实测版本。退出游戏后，仅启用一个同款完整涂装包。请检查整车加载、换色、呼吸、车轮/炮管随动、开镜退镜、切车及远近距离。\n遇到闪退停用本包，恢复已知正常的原版。没有进行自动安装。\n'
         + report['breathing_audit']['summary'] + '\n' + report['breathing_audit']['note'] + '\n'
@@ -881,7 +894,20 @@ def visual_group_audit(archive, name, names):
 
 
 def audit_package(target, original_path, changed, client, excluded=None):
-    issues=[];groups=0;dependencies=set();missing=[]
+    issues=[];groups=0;dependencies=set();dependency_sources={};original_references={};baseline_reference_issues=[]
+    def references(name,tree):
+        refs=set()
+        if name.endswith('.model'):
+            for key in ('nodelessVisual','nodefullVisual'):
+                text=tree.findtext(key)
+                if text:refs.update([text.strip()+'.visual_processed',text.strip()+'.primitives_processed'])
+        if name.endswith('.seq'):
+            refs.update((x.text or '').strip()for x in tree.findall('.//resource')if x.text)
+        if name.endswith('.visual_processed'):
+            refs.update((x.text or '').strip()for x in tree.findall('.//Texture')if x.text)
+            for fx in tree.findall('.//fx'):
+                if fx.text:refs.update(fx.text.strip()[:-3]+'.'+b+'.dx11.fxo'for b in('10','11'))
+        return {ref.lower()for ref in refs if ref}
     archive_format=check_game_zip(target)
     with zipfile.ZipFile(original_path) as original,zipfile.ZipFile(target) as z:
         check_archive(z);names={n.lower():n for n in z.namelist()}
@@ -896,17 +922,16 @@ def audit_package(target, original_path, changed, client, excluded=None):
             if z.getinfo(n).compress_type!=0:raise ValueError('输出包含压缩条目')
             if not n.endswith(('.visual_processed','.model','.seq')):continue
             tree=xml(z.read(n))
-            if n.endswith('.model'):
-                for key in ('nodelessVisual','nodefullVisual'):
-                    text=tree.findtext(key)
-                    if text:dependencies.update([text.strip()+'.visual_processed',text.strip()+'.primitives_processed'])
-            if n.endswith('.seq'):
-                dependencies.update((x.text or '').strip() for x in tree.findall('.//resource') if x.text)
+            refs=references(n,tree);dependencies.update(refs)
+            for ref in refs:dependency_sources.setdefault(ref,set()).add(n)
+            old_name=original_names.get(n.lower())
+            if old_name is not None:
+                try:original_references[n]=references(old_name,xml(original.read(old_name)))
+                except (ValueError,ET.ParseError,KeyError)as error:
+                    # An unreadable baseline cannot prove a reference is new.
+                    original_references[n]=None
+                    baseline_reference_issues.append(dict(resource=old_name,issue=str(error)))
             if not n.endswith('.visual_processed'):continue
-            dependencies.update((x.text or '').strip() for x in tree.findall('.//Texture') if x.text)
-            for fx in tree.findall('.//fx'):
-                if fx.text:
-                    dependencies.update(fx.text.strip()[:-3]+'.'+b+'.dx11.fxo' for b in ('10','11'))
             count,errors=visual_group_audit(z,n,names);groups+=count
             if errors:
                 old_errors=visual_group_audit(original,n,original_names)[1] if n in original.namelist() else []
@@ -916,6 +941,17 @@ def audit_package(target, original_path, changed, client, excluded=None):
         embedded_checks = [light_embedded.audit(z, n, light_recovery.read_manifest(z, n))
                            for n in light_recovery.manifests(z.namelist())]
         unresolved={x.lower() for x in dependencies if 'res/'+x.lower() not in names}
+        introduced_sources={};unknown_sources={}
+        for ref in unresolved:
+            for source in dependency_sources[ref]:
+                if source not in original_references:
+                    introduced_sources.setdefault(ref,set()).add(source)
+                elif original_references[source] is None:
+                    unknown_sources.setdefault(ref,set()).add(source)
+                elif ref not in original_references[source]or 'res/'+ref in original_names:
+                    # A retained reference whose original resource was removed
+                    # is a rebuild regression too, not a legacy omission.
+                    introduced_sources.setdefault(ref,set()).add(source)
     root=Path(client);paths=ET.parse(root/'paths.xml').getroot()
     for node in paths.findall('.//Package'):
         p=root/node.text.strip()
@@ -923,5 +959,11 @@ def audit_package(target, original_path, changed, client, excluded=None):
         with zipfile.ZipFile(p) as z:unresolved.difference_update(n.lower() for n in z.namelist())
         if not unresolved:break
     unresolved={x for x in unresolved if not (root/'res'/x).exists()}
+    introduced=unresolved.intersection(introduced_sources)
+    unknown=unresolved.intersection(unknown_sources)-introduced
     return dict(status='completed_with_issues' if issues or unresolved else 'passed',zip_crc=True,stored_only=True,archive_format=archive_format,
-                unchanged_resources_checked_by_crc_and_size=True,removed_resources=sorted(excluded or ()),embedded_projects=embedded_checks,groups_checked=groups,issues=issues,missing_dependencies=sorted(unresolved))
+                unchanged_resources_checked_by_crc_and_size=True,removed_resources=sorted(excluded or ()),embedded_projects=embedded_checks,groups_checked=groups,issues=issues,missing_dependencies=sorted(unresolved),
+                introduced_missing_dependencies=sorted(introduced),preexisting_missing_dependencies=sorted(unresolved-introduced-unknown),
+                unclassified_missing_dependencies=sorted(unknown),baseline_reference_issues=baseline_reference_issues,
+                missing_dependency_sources={ref:sorted(dependency_sources[ref])for ref in sorted(unresolved)},
+                introduced_missing_dependency_sources={ref:sorted(introduced_sources[ref])for ref in sorted(introduced)})

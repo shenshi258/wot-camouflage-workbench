@@ -1,5 +1,5 @@
 """Import RGBA animations and share the authored atlas/quad/timing with export."""
-import copy, hashlib, io, json, math, re, struct, zipfile
+import copy, hashlib, io, json, math, re, struct, threading, zipfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import numpy as np
@@ -18,12 +18,14 @@ DEFAULTS.update({key:0. for key in WARPS})
 DEFAULTS.update(tint_color='#FFFFFF',tint_strength=0.)
 DEFAULTS.update(contrast=1.,transparency=0.)
 DEFAULTS.update(fit_mode='stretch',tile_repeat=2.)
+DEFAULTS.update(surface_lift=.001,animation=None)
 FIT_MODES={'拉伸填充（旧版）':'stretch','等比完整（留空）':'contain','等比铺满（裁边）':'cover','等比重复平铺':'tile'}
 MAX_BRIGHTNESS=100.
 # A 8x8 grid bends around a pulled corner instead of only skewing two triangles.
 PLANE_SEGMENTS=8
 MANIFEST=re.compile(r'res/particles/ae_import_([0-9a-f]{12})/manifest\.json')
 PACKAGE_CONFLICT_NOTE='同一车型只启用一份涂装或 AE 特效包；更换效果前停用旧包，避免资源覆盖。当前不支持叠加安装多个独立 AE 包。'
+_animation_lock=threading.RLock()
 
 def config(value):
     c=dict(DEFAULTS);c.update(value)
@@ -31,6 +33,11 @@ def config(value):
         if isinstance(c[k],bool):raise ValueError('参数必须是数值：'+k)
         c[k]=float(c[k])
         if not math.isfinite(c[k]) or not lo<=c[k]<=hi:raise ValueError('参数超出范围：'+k)
+    if isinstance(c['surface_lift'],bool):raise ValueError('普通贴面距离必须是数值。')
+    c['surface_lift']=float(c['surface_lift'])
+    if not math.isfinite(c['surface_lift']) or not .001<=c['surface_lift']<=.1:raise ValueError('普通贴面距离范围为 0.001～0.1 米。')
+    from . import ae_animation
+    c['animation']=ae_animation.normalize(c['animation'])
     if c['part'] not in ('hull','turret','gun'):raise ValueError('请选择车体、炮塔或炮管挂点。')
     if c['plane'] not in ('auto','side','front','top'):raise ValueError('特效朝向无效。')
     if c['placement'] not in ('plane','surface','surface_glow'):raise ValueError('请选择独立平面、贴面播放或贴面发光。')
@@ -128,6 +135,46 @@ def colorized_clip(clip,values,folder):
             temporary=target.with_suffix('.tmp.png');result.save(temporary);temporary.replace(target)
     return dict(clip,atlas=str(target.resolve()),atlas_sha256=engine.digest(target))
 
+
+def playback_clip(clip,values,folder):
+    """Bake node motion once; preview and export then use this same RGBA atlas.
+
+    The editable project keeps its original clip and nodes. Cached files are
+    immutable and keyed by source pixels, timing and the complete node values.
+    """
+    from . import ae_animation
+    from .common import atomic_write
+    c=config(values);animation=c['animation']
+    if not animation['nodes']:return clip
+    validate_clip(clip)
+    info=clip.get('animation_info',{})
+    source_hash=info.get('source_atlas_sha256',clip['atlas_sha256'])
+    # One PNG can legally carry different frame orders, regions and logical
+    # aspect ratios. Pixels alone cannot identify its playable clip layout.
+    layout=info.get('source_layout') if info else None
+    if layout is None:layout={k:copy.deepcopy(clip[k]) for k in ('schema','size','frame_size','packed_frame_size','rects','frames','alpha')}
+    key=hashlib.sha256(json.dumps(dict(format='node-atlas-v2',source=source_hash,layout=layout,animation=animation,fps=c['fps']),sort_keys=True).encode()).hexdigest()
+    if info.get('cache_key')==key:return clip
+    if info:raise ValueError('请从原始图片或 GIF 调整动画节点，避免重复烘焙。')
+    folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
+    target=folder/('animation_'+key+'.png');metadata=target.with_suffix('.json')
+    with _animation_lock:
+        if target.is_file() and metadata.is_file():
+            try:
+                cached=json.loads(metadata.read_text('utf-8'));cached['atlas']=str(target.resolve())
+                validate_clip(cached)
+                if cached.get('animation_info',{}).get('cache_key')==key:return cached
+            except (ValueError,OSError,KeyError,TypeError):pass
+        temporary=folder/('animation_'+key+'.tmp.png')
+        try:
+            result=ae_animation.bake(clip,animation,c['fps'],temporary)
+            temporary.replace(target);result['atlas']=str(target.resolve())
+            result['animation_info']['cache_key']=key
+            result['animation_info']['source_layout']=layout
+            atomic_write(metadata,json.dumps({k:v for k,v in result.items() if k!='atlas'},ensure_ascii=False).encode())
+            return result
+        finally:temporary.unlink(missing_ok=True)
+
 def read_rgba(path):
     p=Path(path)
     if p.stat().st_size>16*1024*1024:raise ValueError('单张 PNG 不能超过 16 MB。')
@@ -146,12 +193,15 @@ def pack_frames(frames,destination,premultiplied=False,*,allow_opaque=False):
     if not allow_opaque and not any(im.getchannel('A').getextrema()[0]<255 for im in frames):raise ValueError('素材完全不透明，请导出透明背景。')
     if not any(im.getchannel('A').getextrema()[1]>0 for im in frames):raise ValueError('所有帧均完全透明，无法制作可见特效。')
     # Bound upload size independently of AE render dimensions; preserve aspect.
-    ratio=min(1,512/max(w,h));cw,ch=max(1,round(w*ratio)),max(1,round(h*ratio))
+    # A half-texel inset needs two sample centres on each axis. Repeat the
+    # single source row/column through resize instead of emitting equal UV
+    # bounds; frame_size below keeps the authored logical dimensions/aspect.
+    ratio=min(1,512/max(w,h));cw,ch=max(2,round(w*ratio)),max(2,round(h*ratio))
     while True:
         cols=min(len(frames),max(1,4096//(cw+4)))
         rows=math.ceil(len(frames)/cols)
         if rows*(ch+4)<=4096:break
-        cw=max(1,round(cw*.9));ch=max(1,round(ch*.9))
+        cw=max(2,round(cw*.9));ch=max(2,round(ch*.9))
     aw=1<<math.ceil(math.log2(cols*(cw+4)));ah=1<<math.ceil(math.log2(rows*(ch+4)))
     atlas=Image.new('RGBA',(aw,ah));rects=[]
     for i,frame in enumerate(frames):
@@ -489,8 +539,9 @@ def surface_geometry(project,c,client,clip=None):
         size=fitted_size(extent,clip['frame_size'][0]/clip['frame_size'][1],c)
         uv=((centered*extent)@rotation.T)/(size*c['uv_scale']*np.array([c['uv_scale_x'],c['uv_scale_y']]))+.5
     vertices[:,6:8]=uv
-    # 1 mm separates ordinary playback from the paint; glow has an explicit lift.
-    distance=.001 if c['placement']=='surface' else c['lift']
+    # Separate controls retain the old 1 mm playback default while allowing the
+    # user to increase its separation when checking possible depth conflicts.
+    distance=c['surface_lift'] if c['placement']=='surface' else c['lift']
     vertices[:,:3]+=vertices[:,3:6]*distance
     vertices,indices=clip_pattern_mesh(vertices,indices,c)
     vertices[:,3:6]/=np.maximum(np.linalg.norm(vertices[:,3:6],axis=1)[:,None],1e-12)
@@ -590,6 +641,7 @@ def build(project,clip,values,client,outdir,title):
     validate_clip(clip);c=validate_bilateral_placement(values);environment=engine.client_info(client)
     if not project.get('baseline_user_confirmed'):raise ValueError('请先确认原涂装在所选客户端正常。')
     if engine.digest(project['source'])!=project['source_sha256']:raise ValueError('输入涂装已改变，请重新选择。')
+    clip=playback_clip(clip,c,Path(outdir)/'动画缓存')
     clip=colorized_clip(clip,c,Path(outdir)/'颜色缓存')
     # Verify blend enumerations in this exact client before authoring resources.
     with zipfile.ZipFile(Path(client)/'res/packages/shaders.pkg') as z:

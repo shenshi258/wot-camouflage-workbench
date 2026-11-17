@@ -69,7 +69,7 @@ class UIReview34Tests(unittest.TestCase):
     def test_library_entry_and_reset_help_match_the_current_controls(self):
         app=Workbench()
         try:
-            button=next(b for b in app.buttons if b.cget('text')=='管理图片素材库')
+            button=next(b for b in app.buttons if b.cget('text')=='图片 / GIF 素材库…')
             self.assertIn(button,app.hover_help.providers)
         finally:app.destroy()
         self.assertIn('平铺次数',ae_help.topic('重置缩放、偏移和裁剪').body)
@@ -82,7 +82,7 @@ class UIReview34Tests(unittest.TestCase):
             with patch.object(app,'task',side_effect=lambda create,done:done(create())),patch.object(preview3d,'Session') as session:
                 app.open_asset_library();session.assert_called_once_with(None,None,library_only=True)
                 self.assertIn(session.return_value,app.paint_sessions)
-            self.assertTrue(any(str(button.cget('text'))=='管理图片素材库' for button in app.buttons))
+            self.assertTrue(any(str(button.cget('text'))=='图片 / GIF 素材库…' for button in app.buttons))
         finally:app.destroy()
 
     def test_scales_follow_theme_in_both_directions_and_disabled_focus_states(self):

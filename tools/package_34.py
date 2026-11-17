@@ -23,7 +23,7 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
     args=parser.parse_args();workspace=args.workspace.resolve()
     sys.path.insert(1,str(ROOT/'tests'))
     if args.revision and not re.fullmatch(r'R[1-9][0-9]*',args.revision):parser.error('修订名须为 R1、R2 等。')
-    old='wot涂装工作台 3.3_35款预设版_R1';name='wot涂装工作台 '+version+'_'+label
+    old='wot涂装工作台 3.3_35款预设版_R1';name='wot涂装工作台 '+version+('_'+label if label else '')
     if args.revision:name+='_'+args.revision
     base=workspace/'交付'/(old+'.zip');out=workspace/'交付'/name;source=out.with_name(name+'_源码')
     target=out.parent/(name+'.zip')
@@ -64,7 +64,7 @@ def main(version='3.4',label='AE外观调节版',ui_count=36,extra_tests=(),web_
         copy(metadata_dir,program/'runtime/Lib/site-packages'/metadata_dir.name)
         dependencies.append(dict(module=module_name,distribution=distribution_name,version=distribution.version))
     for folder in ('wotcamo','tests','tools','config','blender','reference','预设'):copy(ROOT/folder,source/folder)
-    # 项目介绍、双语更新说明及致谢保留在源码中，不附进便携包。
+    # 项目介绍和双语更新说明保留在源码中，不附进便携包。
     for filename in ('README.md',version+'更新说明.md'):shutil.copy2(ROOT/filename,source/filename)
     (out/'使用说明.txt').write_text('wot涂装工作台 '+version+'\n运行“启动wot涂装工作台 '+version+'.cmd”。\n'+extra_guide+'AE 可复制/粘贴设置，在“长宽与贴合”选择等比适配或重复平铺；三维预览展开“缩放与裁剪”也可使用。\n亮度最高 100 倍；透明度 0% 保留原透明度，100% 完全透明。旧成品需重新生成；游戏内效果待实测。\n',encoding='utf-8-sig')
     records,issues=ae_presets.scan(program/'预设/AE特效');assert len(records)==preset_count and not issues

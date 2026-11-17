@@ -18,6 +18,14 @@ class AESurfaceTests(unittest.TestCase):
         self.project['ae_selection']=dict(schema=1,source_sha256=self.project['source_sha256'],groups=[dict(visual=self.visual,render_set=0,geometry=0,group=0,triangles=[0])])
         self.c=ae.config(dict(placement='surface',plane='auto'))
     def tearDown(self):self.temp.cleanup()
+    def test_regular_surface_distance_is_adjustable_without_changing_glow_or_original(self):
+        original=copy.deepcopy(self.project)
+        default=ae.surface_geometry(self.project,self.c,None)
+        moved=ae.surface_geometry(self.project,ae.config(dict(self.c,surface_lift=.02)),None)
+        self.assertTrue(np.allclose(moved['vertices'][:,0]-default['vertices'][:,0],.019))
+        self.assertTrue(np.array_equal(moved['vertices'][:,1:],default['vertices'][:,1:]));self.assertEqual(original,self.project)
+        for invalid in (0,False,float('nan'),.2):
+            with self.assertRaises(ValueError):ae.config(dict(surface_lift=invalid))
     def test_single_triangle_does_not_draw_the_unselected_half(self):
         plan=ae.surface_geometry(self.project,self.c,None)
         self.assertEqual(len(plan['indices']),3);self.assertEqual(plan['selected_triangles'],1)

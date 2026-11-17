@@ -5,7 +5,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox,simpledialog,colorchooser
 from .common import ROOT
-from . import ae_effects as ae,ae_presets,ae_help,ae_media,ae_media_gui,preview3d,APP_NAME
+from . import ae_effects as ae,ae_presets,ae_help,ae_media,ae_media_gui,ae_animation,preview3d,APP_NAME
 from .light_tooltips import HoverHelp
 from .ui_theme import configure_theme, build_header, prepare_dialog, style_listbox, register_widget, lock_controls, unlock_controls, start_progress, stop_progress
 
@@ -36,7 +36,8 @@ class AEImporter(tk.Tk):
         self.columns=tk.StringVar(value='4');self.rows=tk.StringVar(value='4');self.count=tk.StringVar(value='16')
         self.note=tk.StringVar(value='选择涂装包，再导入 GIF / 视频或透明 PNG 动画素材。')
         self.clip_note=tk.StringVar(value='尚未导入素材');self.client_note=tk.StringVar()
-        self.values={k:tk.StringVar(value=str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','mirror','blend','placement','fit_mode')}
+        self.values={k:tk.StringVar(value=str(v)) for k,v in ae.DEFAULTS.items() if k not in ('part','plane','mirror','blend','placement','fit_mode','animation')}
+        self.animation=ae_animation.normalize(None);self.animation_note=tk.StringVar(value='未设置节点：保留素材原动画')
         self.fit_mode=tk.StringVar(value=next(k for k,v in ae.FIT_MODES.items() if v=='stretch'))
         self.part=tk.StringVar(value='车体');self.plane=tk.StringVar(value='侧面');self.blend=tk.StringVar(value='发光叠加');self.mirror=tk.BooleanVar(value=False)
         self.placement=tk.StringVar(value='独立平面');self.mode_note=tk.StringVar()
@@ -104,7 +105,10 @@ class AEImporter(tk.Tk):
         ttk.Label(left,textvariable=self.client_note,foreground='#58657a',wraplength=325).pack(anchor='w')
         ttk.Checkbutton(left,text='我确认原涂装在所选客户端\n可以正常显示',variable=self.baseline).pack(anchor='w',pady=(8,15))
         ttk.Separator(left).pack(fill='x',pady=(0,12));ttk.Label(left,text='自定义动画素材',font=('Microsoft YaHei UI',11,'bold')).pack(anchor='w')
-        self.button(left,'导入 GIF / 视频动画…',self.choose_media).pack(fill='x',pady=(8,0))
+        self.button(left,'图片 / GIF 素材库…',self.open_element_library).pack(fill='x',pady=(8,0))
+        self.button(left,'导入 GIF / 视频动画…',self.choose_media).pack(fill='x',pady=(7,0))
+        self.button(left,'动画节点 / 关键帧…',self.edit_animation).pack(fill='x',pady=(7,0))
+        ttk.Label(left,textvariable=self.animation_note,wraplength=320,style='Muted.TLabel').pack(anchor='w',pady=(5,0))
         row=ttk.Frame(left);row.pack(fill='x',pady=10)
         self.button(row,'导入序列帧…',self.choose_frames).pack(side='left',fill='x',expand=True);self.button(row,'选择帧文件夹…',self.choose_folder).pack(side='left',fill='x',expand=True,padx=(7,0))
         self.button(left,'导入 PNG 图集…',self.choose_sheet).pack(fill='x')
@@ -164,7 +168,7 @@ class AEImporter(tk.Tk):
         # Independent axes are shared by every placement mode; only fitting
         # offsets and surface-only controls follow the selected surface mode.
         field(fitting,'长度（横向倍率）','uv_scale_x');field(fitting,'宽度（纵向倍率）','uv_scale_y')
-        for label,key in [('贴面整体缩放','uv_scale'),('贴面横向偏移','u_offset'),('贴面纵向偏移','v_offset'),('发光离面距离（米）','lift')]:self.surface_widgets.append(field(fitting,label,key))
+        for label,key in [('贴面整体缩放','uv_scale'),('贴面横向偏移','u_offset'),('贴面纵向偏移','v_offset'),('普通贴面距离（米）','surface_lift'),('发光离面距离（米）','lift')]:self.surface_widgets.append(field(fitting,label,key))
         ttk.Label(fitting,text='长度只改横向，宽度只改纵向，1 为原大小；独立平面也可用。贴面若只显示一小块，请在三维勾选“整块装甲”并重新吸附。装甲外侧仍会裁切。',wraplength=550,style='Muted.TLabel').pack(anchor='w',pady=10)
         self.button(fitting,'重置缩放、偏移和裁剪',self.reset_fitting).pack(anchor='w')
         for label,key in [('左侧裁剪（%）','crop_left'),('右侧裁剪（%）','crop_right'),('顶部裁剪（%）','crop_top'),('底部裁剪（%）','crop_bottom')]:field(crop,label,key)
@@ -211,6 +215,7 @@ class AEImporter(tk.Tk):
         for w in self.plane_widgets:w.state(['disabled'] if surface else ['!disabled'])
         for w in self.surface_widgets:w.state(['!disabled'] if surface else ['disabled'])
         self.fields['lift'].state(['!disabled'] if glow else ['disabled'])
+        self.fields['surface_lift'].state(['!disabled'] if surface and not glow else ['disabled'])
         self.update_selection_note();self.param_tabs.select(0);self.changed()
 
     def fit_changed(self,*args):
@@ -298,13 +303,14 @@ class AEImporter(tk.Tk):
 
     def describe_preset(self,*args):
         record=self.selected_preset()
-        if not record:self.preset_note.set('还没有 AE 预设。导入 PNG 素材并调好参数后，点击“保存为预设”，或从管理中导入。');return
+        if not record:self.preset_note.set('还没有 AE 预设。导入图片、GIF 或视频并调好参数后，点击“保存为预设”，或从管理中导入。');return
         self.preset_note.set(ae_presets.summary(record))
 
     def accept_preset(self,result):
         data,clip=result
         # No source, baseline, joint, selection or placement-mode changes here.
         values=ae_presets.apply_settings(self.collect(),data['config'])
+        self.set_animation(values['animation'])
         self.imported(clip)
         for key in ae_presets.SETTINGS:
             if key in self.values:self.values[key].set(str(values[key]))
@@ -324,7 +330,7 @@ class AEImporter(tk.Tk):
         path=record['path'];self.job(lambda:ae_presets.load(path,self.work/'presets'),self.accept_preset)
 
     def save_preset(self):
-        if not self.clip:return messagebox.showinfo('先导入素材','请先导入 PNG 序列帧或图集，并调整播放和尺寸参数。保存预设不需要选择涂装。',parent=self)
+        if not self.clip:return messagebox.showinfo('先导入素材','请先导入图片、GIF、视频、PNG 序列帧或图集，再调整播放、节点和尺寸参数。保存预设不需要选择涂装。',parent=self)
         try:values=self.collect()
         except ValueError as error:return messagebox.showerror('参数有误',str(error),parent=self)
         name=simpledialog.askstring('保存 AE 预设','预设名称（最多 60 字）：',initialvalue=self.preset_name.get() or '我的 AE 特效',parent=self)
@@ -457,7 +463,7 @@ class AEImporter(tk.Tk):
         threading.Thread(target=run,daemon=True).start()
 
     def collect(self):
-        return ae.config(dict({k:v.get() for k,v in self.values.items()},part=PARTS[self.part.get()],plane=PLANES[self.plane.get()],blend=BLENDS[self.blend.get()],fit_mode=ae.FIT_MODES[self.fit_mode.get()],mirror=self.mirror.get(),placement=PLACEMENTS[self.placement.get()]))
+        return ae.config(dict({k:v.get() for k,v in self.values.items()},animation=getattr(self,'animation',None),part=PARTS[self.part.get()],plane=PLANES[self.plane.get()],blend=BLENDS[self.blend.get()],fit_mode=ae.FIT_MODES[self.fit_mode.get()],mirror=self.mirror.get(),placement=PLACEMENTS[self.placement.get()]))
 
     def copy_settings(self):
         if self.busy:return
@@ -469,6 +475,7 @@ class AEImporter(tk.Tk):
     def restore_settings(self,values):
         # 先完整验证，成功后再填写控件；呈现方式会触发默认值，因此先设再恢复其他参数。
         c=ae.config(values)
+        self.set_animation(c['animation'])
         self.placement.set(next(k for k,v in PLACEMENTS.items() if v==c['placement']))
         for key,var in self.values.items():var.set(str(c[key]))
         for var,mapping,key in [(self.part,PARTS,'part'),(self.plane,PLANES,'plane'),(self.blend,BLENDS,'blend'),(self.fit_mode,ae.FIT_MODES,'fit_mode')]:var.set(next(k for k,v in mapping.items() if v==c[key]))
@@ -482,7 +489,7 @@ class AEImporter(tk.Tk):
         self.note.set('已粘贴 AE 参数；当前车辆、素材、承载面和客户端保留。位置数值会复用，跨车型请重新核对。')
 
     def require(self):
-        if not self.clip:raise ValueError('请先导入 PNG 序列帧或图集。')
+        if not self.clip:raise ValueError('请先导入图片、GIF、视频、PNG 序列帧或图集。')
         client=str(ae.engine.resolve_client_root(self.client.get()))
         if not self.source.get():raise ValueError('请先选择涂装包。')
         return client,self.collect(),self.source.get(),self.baseline.get()
@@ -522,6 +529,49 @@ class AEImporter(tk.Tk):
         if path:
             self.job(lambda:ae_media.probe(path),lambda info:ae_media_gui.MediaImportDialog(self,info,lambda options:self.import_media(path,options)))
 
+    def open_element_library(self):
+        if self.busy:return
+        from .ae_library_gui import AssetLibraryDialog
+        AssetLibraryDialog(self,self.use_library_item)
+
+    def use_library_item(self,item):
+        from .asset_library import Library
+        try:
+            raw,kind=Library().image(item['id'])
+            suffix='.gif' if kind=='image/gif' else '.png' if kind=='image/png' else '.webp' if kind=='image/webp' else '.jpg'
+            source=self.work/('element_'+item['id']+suffix);source.write_bytes(raw)
+        except (OSError,ValueError,KeyError) as error:
+            messagebox.showerror('素材无法读取',str(error),parent=self);return False
+        if kind=='image/gif':
+            self.job(lambda:ae_media.probe(source),lambda info:ae_media_gui.MediaImportDialog(self,info,lambda options:self.import_media(source,options)))
+        else:
+            destination=self.work/('picture_'+datetime.now().strftime('%H%M%S%f')+'.png')
+            def done(clip):
+                self.blend.set('普通透明');self.imported(clip)
+                self.note.set('图片素材已载入，可打开“动画节点 / 关键帧”添加运动，或直接放置到车身。')
+            self.job(lambda:ae_media.import_picture(source,destination),done)
+        return True
+
+    def set_animation(self,value):
+        self.animation=ae_animation.normalize(value)
+        note=getattr(self,'animation_note',None)
+        if note is not None:note.set('%d 个节点 · %g 秒 · 素材画布内动画'%(len(self.animation['nodes']),self.animation['duration']) if self.animation['nodes'] else '未设置节点：保留素材原动画')
+
+    def edit_animation(self):
+        if self.busy:return
+        from .ae_animation_gui import AnimationDialog
+        try:fps=self.collect()['fps']
+        except ValueError as error:return messagebox.showerror('请先检查参数',str(error),parent=self)
+        def apply(value):self.set_animation(value);self.changed();self.note.set('动画节点已应用；工程、预设和导出会保留节点。')
+        AnimationDialog(self,self.animation,fps,apply,self.preview_animation)
+
+    def preview_animation(self,value):
+        if not self.clip:return messagebox.showinfo('先添加素材','先从素材库选图片或 GIF，再预览动画。',parent=self)
+        try:values=dict(self.collect(),animation=ae_animation.normalize(value))
+        except ValueError as error:return messagebox.showerror('动画参数',str(error),parent=self)
+        clip=copy.deepcopy(self.clip)
+        self.job(lambda:ae.playback_clip(clip,values,self.work/'动画预览'),lambda prepared:ae_media_gui.ClipPreview(self,prepared,values))
+
     def import_media(self,path,options):
         dest=self.work/('media_'+datetime.now().strftime('%H%M%S%f')+'.png')
         def done(clip):
@@ -533,6 +583,7 @@ class AEImporter(tk.Tk):
     def preview_clip(self):
         if self.busy:return
         if not self.clip:return messagebox.showinfo('动画素材','请先导入动画或套用一个预设。',parent=self)
+        if self.animation['nodes']:return self.preview_animation(self.animation)
         try:ae_media_gui.ClipPreview(self,self.clip,self.collect())
         except (ValueError,OSError) as error:messagebox.showerror('素材无法预览',str(error),parent=self)
 

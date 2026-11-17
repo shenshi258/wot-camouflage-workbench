@@ -180,6 +180,7 @@ class Session:
 
     def update_effect(self,clip,config):
         from . import ae_effects
+        clip=ae_effects.playback_clip(clip,config,self.folder/'animation_cache')
         clip=ae_effects.colorized_clip(clip,config,self.folder/'color_cache')
         data=ae_effects.preview_data(clip,config,self.project,self.client)
         if self.effect is None or self.effect['atlas_sha256']!=data['atlas_sha256']:
@@ -256,7 +257,7 @@ def viewer(url,smoke=None):
     except ImportError as error:raise RuntimeError('三维预览窗口组件缺失，请使用完整的工作台程序。') from error
     class Api:
         def close(self):window.destroy()
-    section='图片素材库' if urlsplit(url).path.endswith('/library.html') else '三维预览'
+    section='图片 / GIF 素材库' if urlsplit(url).path.endswith('/library.html') else '三维预览'
     window=webview.create_window(APP_NAME+' · '+section,url,width=1100,height=720,min_size=(800,600),background_color='#0b111c',js_api=Api())
     if smoke:
         def test():

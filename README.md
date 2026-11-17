@@ -1,10 +1,10 @@
-# WOT 涂装工作台 3.9 / WOT Camouflage Workbench
+# wot涂装工作台 4.0 / WOT Camouflage Workbench
 
 [中文版](#中文版) | [English](#english)
 
-3.9 增加普通涂装的“应用范围”：所有同资源车辆（默认）或仅自己的车辆。基础涂装、三维贴图和已有普通涂装转换均支持，范围随草稿保存。仅控制本机显示；仅自己模式生成独立资源路径，暂不支持 UML、第三方脚本或共享覆盖包。游戏内效果待实测，本次不包含车库闪烁修复。
+4.0 统一图片／GIF 素材库，可自行导入、分类、搜索、预览并在 AE 中复用；增加时间关键帧节点，在素材画布内控制移动、旋转、缩放和不透明度，支持线性／平滑／保持过渡。预览与导出使用同一份烘焙动画，节点随工程和预设保存。普通贴面增加独立可调距离，默认仍为 1 毫米；游戏内闪烁原因尚未确定，未宣称已修复。保留 3.9 的普通涂装应用范围功能。
 
-Version 3.9 adds a scope choice for ordinary skins: all vehicles sharing the same resources (default), or only your vehicle. It applies to texture builds, 3D painting and conversion of existing ordinary skins, and is retained in drafts. Own-vehicle mode uses private resource paths and excludes UML, third-party scripts and shared-resource override packages. This controls local rendering only. In-game behavior remains untested; the garage flicker diagnostic is separate.
+Version 4.0 unifies the persistent image/GIF library and adds editable time nodes for movement, rotation, scale and opacity inside an element's 2D canvas. Linear, smooth and hold interpolation share the same baked frames in preview and export. Nodes are retained in projects and presets. Ordinary armor playback now has adjustable surface separation, retaining the previous 1 mm default. The in-game flicker cause remains unconfirmed. Version 3.9 skin-scope features remain available.
 
 另有独立 [本地涂装屏蔽 2.1.5 游戏内插件](game_mods/local_skin_filter/README.md)：选车只显示检测到自制模型／涂装的车型，采用亚服中文客户端名称，增加国家／系别、等级和类别筛选，放大文字及“应用改动”按钮，适配七种分辨率。补齐 SD／HD 高清贴图，区分挂载状态，附游戏外缓存共享工具减少重复文件占用，保留完整模型和画质。50 项行为检查及双区原生字节码、车型范围和资源回读完成；百突实际战斗分支与新包游戏视觉仍待复测。UML／AE 独立挂载与共享覆盖仍需适配，未发布远程 Release。
 
@@ -59,7 +59,7 @@ Settings are saved in editable projects and exported presets, and applied to gen
 
 ### Download and run
 
-Extract the supplied **3.8 local portable ZIP** to a writable folder and run `启动wot涂装工作台 3.8.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. Project introductions, release notes and acknowledgements stay outside the portable ZIP. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
+Extract the supplied **4.0 local portable ZIP** to a writable folder and run `启动wot涂装工作台 4.0.cmd`. Published downloads are listed in [Releases](https://github.com/shenshi258/wot-camouflage-workbench/releases); this local build has not been published. Project introductions and release notes stay outside the portable ZIP. The source repository does not include the portable Python runtime. The glass appearance uses colors and highlights; it does not provide real-time background blur or refraction.
 
 ### Earlier R1 changes
 
@@ -71,9 +71,6 @@ Extract the supplied **3.8 local portable ZIP** to a writable folder and run `�
 
 Version 3.8 passed 131 backend checks and 44 isolated desktop UI checks, plus real-browser import/search/persistence/recycle/painting-export checks and preview interaction scripts. The portable build repeats the backend and desktop suites with its included runtime and video decoder. Export checks use synthetic fixtures to compare imported media, preview/export geometry and texture pixels; they do not prove native shader rendering. Complete in-game vehicle loading and visual effects have **not been tested** (`not_tested`). The actual running client is unconfirmed. The reported static-package flicker remains for investigation.
 
-### Acknowledgements
-
-Thanks to **コイカツ** and **GPT** for their help and support.
 
 ---
 
@@ -95,7 +92,7 @@ AE 窗口点击 **导入 GIF / 视频动画…**，选择片段时间、1～60 F
 
 ### 3.6 新增：可调色的彩色流星雨，修正改色反馈
 
-套用 **36 彩色流星雨**，获得 96 帧、24 FPS、4 秒循环的透明动画。着色强度 0% 保留彩虹原色，100% 统一为所选颜色。现在直接输入完整色号也会自动启用原为 0% 的着色；三维取色器与强度滑条拖动时同步，避免旧同步状态覆盖新选择，并按颜色版本读取贴图。高亮度可能使色差变淡，已有成品需重新生成。便携包不附项目双语介绍、更新说明和致谢。
+套用 **36 彩色流星雨**，获得 96 帧、24 FPS、4 秒循环的透明动画。着色强度 0% 保留彩虹原色，100% 统一为所选颜色。现在直接输入完整色号也会自动启用原为 0% 的着色；三维取色器与强度滑条拖动时同步，避免旧同步状态覆盖新选择，并按颜色版本读取贴图。高亮度可能使色差变淡，已有成品需重新生成。便携包不附项目双语介绍和更新说明。
 
 ### 3.5 新增：参数复刻、等比适配与重复平铺
 
@@ -124,7 +121,7 @@ AE 窗口点击 **导入 GIF / 视频动画…**，选择片段时间、1～60 F
 - **AE 特效：** 导入透明动画或使用 36 款预设，调色、复制/粘贴参数，按原比例适配或重复平铺，调整位置、贴合装甲、裁剪、长宽及左右双侧。
 - **校验与安装：** 查看产物报告和哈希，向所选客户端安装并备份，按安装记录回滚。文件校验不能代替游戏内测试。
 
-3.8 本地便携包解压到可写目录后运行「启动wot涂装工作台 3.8.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.8 源码与预设；源码不包含便携版运行环境。内置全部 36 款可导入、导出的 AE 特效预设，保留原 35 款总览和逐款动画，新流星雨预览位于「程序/预设/AE预览」。
+3.8 本地便携包解压到可写目录后运行「启动wot涂装工作台 4.0.cmd」。在线已发布版本见 Releases；本次本地版尚未上传。本仓库为 3.8 源码与预设；源码不包含便携版运行环境。内置全部 36 款可导入、导出的 AE 特效预设，保留原 35 款总览和逐款动画，新流星雨预览位于「程序/预设/AE预览」。
 
 ## 可选液态玻璃界面
 
@@ -155,8 +152,3 @@ AE 窗口点击 **导入 GIF / 视频动画…**，选择片段时间、1～60 F
 3.8 完成 131 项后台回归、44 项隔离桌面真实界面检查，以及真实浏览器中的图库导入、搜索、持久保存、回收撤销、点选贴图和导出检查。最终便携包使用自带运行环境和视频读取组件复核相同后台和界面测试；复核不计为新增测试。界面检查不切换当前桌面，不操作游戏。导出测试使用合成夹具，比较媒体导入、改色像素、预览与导出网格及原始资源，不能证明原生着色器或游戏整车加载成功。
 
 此前欧服 Pz70 原涂装属于用户确认可用的基线，并非代理亲自游戏实测。本次实际运行客户端尚未确认，未安装或启动游戏；整车加载、实际光效、遮挡和远近显示状态均为 not_tested。此次制作器功能更新不代表此前反馈的游戏内闪烁已经解决。实际客户端或最终生成包改变后，需重新核对并游戏内验证。
-
-
-## 致谢
-
-感谢 コイカツ 和 GPT 对本项目的帮助与支持。

@@ -285,14 +285,14 @@ def brightness_bounds(config, offset=0.0, samples=96):
 
     流水呼吸 leaves dimming to the native Pulse shader, so the colour track only
     carries colour there and the bounds come from 暗相系数 plus the shader ramp.
-    流水渐变 bakes a flat envelope, so its bounds are exactly 1.0.
+    The other dimming modes have a complete cosine or gated-cosine envelope in
+    the validated common period. Their exact extrema are also low and 1.0,
+    regardless of spatial phase. Sampling a fixed grid can miss every pulse
+    when its spacing is a multiple of the breath period. Keep offset/samples
+    as compatible arguments; neither is needed for these analytic extrema.
     """
     if not has_dimming(config):return (1., 1.)
-    if config['mode'] == '流水呼吸':
-        return (config['low'], 1.)
-    step = config['period'] / samples
-    values = [envelope_at(step * i, offset, config) for i in range(samples + 1)]
-    return (min(values), max(values))
+    return (config['low'], 1.)
 
 
 def spatial_offset(point, center, config, identifier=''):

@@ -260,10 +260,14 @@ def split_bands(vertices,ids,wheel):
     if hi-lo<.1:return [(vertices.copy(),ids.copy().ravel(),float((lo+hi)/2))]
     # 0.5m bands, using exact triangle clipping to preserve source surface and UVs.
     edges=np.arange(np.floor(lo*2)/2,np.ceil(hi*2)/2+.001,.5)
-    for low,high in zip(edges,edges[1:]):
+    for band,(low,high) in enumerate(zip(edges,edges[1:])):
         triangles=[]
         for tri in vertices[ids]:
             if tri[:,2].max()<low or tri[:,2].min()>high:continue
+            # A complete face on a shared plane belongs to the following band.
+            # Crossing triangles still use closed clipping so their edge UVs
+            # and normals interpolate normally; the final outer plane stays.
+            if band<len(edges)-2 and np.all(tri[:,2]==high):continue
             poly=clip(list(tri),2,low,True);poly=clip(poly,2,high,False) if poly else []
             for k in range(1,len(poly)-1):
                 v=np.array([poly[0],poly[k],poly[k+1]])
@@ -361,10 +365,13 @@ def split_for_direction(vertices,ids,direction,anchor_matrix,wheel=False):
     edges=np.arange(np.floor(lo*5)/5,np.ceil(hi*5)/5+.00001,.2)
     if len(edges)>512:raise ValueError('方向分段过多，请缩小选中的灯面范围。')
     result=[]
-    for low,high in zip(edges,edges[1:]):
+    for band,(low,high) in enumerate(zip(edges,edges[1:])):
         rows=[]
         for tri in augmented[triangles]:
             if tri[:,axis].max()<low or tri[:,axis].min()>high:continue
+            # Use the same half-open ownership as legacy Z bands. Only a whole
+            # coplanar triangle is skipped here, never a crossing triangle.
+            if band<len(edges)-2 and np.all(tri[:,axis]==high):continue
             poly=clip(list(tri),axis,low,True);poly=clip(poly,axis,high,False) if poly else []
             for i in range(1,len(poly)-1):
                 vs=np.array([poly[0],poly[i],poly[i+1]])
