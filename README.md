@@ -31,7 +31,7 @@ AE 导出会共用完全相同的画面和模型、重排图集减少空白，�
 
 ### 致谢
 
-感谢 **コイカツ** 对功能需求和测试反馈的帮助，感谢 **GPT** 在开发与整理中的协助。
+感谢 **GPT** 在开发与整理中的协助。
 
 ---
 
@@ -64,4 +64,4 @@ New animation and lighting exports require in-game validation for vehicle loadin
 
 ### Acknowledgements
 
-Thanks to **コイカツ** for feature requests and testing feedback, and to **GPT** for development and documentation assistance.
+Thanks to **GPT** for development and documentation assistance.
