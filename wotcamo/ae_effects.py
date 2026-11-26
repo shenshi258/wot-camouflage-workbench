@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 import numpy as np
 from PIL import Image, ImageChops
 from .common import ROOT, title_name
+from . import ae_atlas
 from . import light_assets as mesh, light_effects as engine
 
 MAX_FRAMES=128
@@ -418,13 +419,14 @@ def write_track(obj,name,frames):
         frame=ET.SubElement(tr,'frame')
         for k,v in [('startTime',format(t,'.12g')),('value',' '.join(map(str,value))),('inTangent','0 0 0'),('outTangent','0 0 0'),('tangentMode','0')]:ET.SubElement(frame,k).text=v
 
-def sequence(prefix,clip,c,position,frame_tag='frame_'):
+def sequence(prefix,clip,c,position,frame_tag='frame_',*,frame_models=None):
     root=ET.Element('root');ET.SubElement(root,'duration').text=format(clip['frames']/c['fps'],'.12g')
     obj=ET.SubElement(root,'sequenceObject')
     for k,v in [('name','Root'),('type','model'),('resource','')]:ET.SubElement(obj,k).text=v
     for i in range(clip['frames']):
         obj=ET.SubElement(root,'sequenceObject')
-        for k,v in [('name','AE_Frame_%03d'%i),('type','model'),('resource',prefix+frame_tag+'%03d.model'%i),('castsShadow','false')]:ET.SubElement(obj,k).text=v
+        model_index=i if frame_models is None else frame_models[i]
+        for k,v in [('name','AE_Frame_%03d'%i),('type','model'),('resource',prefix+frame_tag+'%03d.model'%model_index),('castsShadow','false')]:ET.SubElement(obj,k).text=v
         write_track(obj,'position',[(0.,position)])
         write_track(obj,'rotationEuler',[(0.,[0,0,0])])
         write_track(obj,'scale',[(t,[s,s,s]) for t,s in frame_keys(i,clip['frames'],c['fps'])])
@@ -664,14 +666,22 @@ def build(project,clip,values,client,outdir,title):
                 own='res/particles/ae_import_'+match[1]+'/'
                 excluded.update(x for x in z.namelist() if x.startswith(own))
                 excluded.add('res/scripts/client/gui/mods/mod_ae_import_'+match[1]+'.pyc')
-    atlas=Image.open(clip['atlas']).convert('RGBA');added['res/'+prefix+'atlas.dds']=dds(atlas)
-    added['res/'+prefix+'atlas.png']=Path(clip['atlas']).read_bytes()
+    with Image.open(clip['atlas']) as source_atlas:
+        atlas, export_rects, frame_models = ae_atlas.compact(source_atlas.convert('RGBA'), clip['rects'])
+    atlas_payload = dds(atlas)
+    added['res/'+prefix+'atlas.dds'] = atlas_payload
+    # The editable project/preset carries the PNG. The game only samples DDS.
+    export_layout = dict(size=list(atlas.size), source_size=list(clip['size']),
+                         rects=export_rects, frame_models=frame_models,
+                         unique_frames=len(export_rects), dds_bytes=len(atlas_payload),
+                         original_dds_bytes=128+4*math.prod(clip['size']),
+                         omitted_png_bytes=Path(clip['atlas']).stat().st_size)
     added['res/'+prefix+'phase_white.dds']=mesh.dds(True)
     variants=[('frame_',plan['vertices'],plan['indices'])]
     if c['placement']=='plane' and len(positions(c))>1:
         mirrored,mirrored_indices=reflect_plane_geometry(plan['vertices'],plan['indices'])
         variants.append(('frame_mirror_',mirrored,mirrored_indices))
-    for i,rect in enumerate(clip['rects']):
+    for i,rect in enumerate(export_rects):
         for frame_tag,geometry,indices in variants:
             vertices=atlas_vertices(geometry,rect);base=prefix+frame_tag+'%03d'%i
             visual=ET.fromstring(mesh.effect_visual('ae_frame',prefix+'atlas.dds',vertices,len(indices)//3,prefix=prefix,tint=c['brightness']))
@@ -686,13 +696,14 @@ def build(project,clip,values,client,outdir,title):
     rigs=[]
     for i,position in enumerate(positions(c)):
         seq=prefix+'effect_%d.seq'%i;tag='frame_mirror_' if i==1 and len(variants)>1 else 'frame_'
-        added['res/'+seq]=sequence(prefix,clip,c,position,tag)
+        added['res/'+seq]=sequence(prefix,clip,c,position,tag,frame_models=frame_models)
         rigs.append(dict(id='ae_effect_%d'%i,part=plan['part'],anchor=plan['anchor'],anchor_kind=plan['anchor_kind'],sequence=seq))
     runtime=(Path(__file__).parent/'light_runtime.py.txt').read_text(encoding='utf-8').replace('RIGS = []','RIGS = '+repr(rigs)).replace('__VEHICLE_TYPE__',project['vehicle'])
     runtime=runtime.replace('CustomVehicle.LightMaker','CustomVehicle.AEImport')
     src=outdir/'AE挂载脚本.py';src.write_text(runtime,encoding='utf-8');compiled=outdir/'AE挂载脚本.pyc';engine.compile27(src,compiled,client)
     added['res/scripts/client/gui/mods/mod_ae_import_'+token+'.pyc']=compiled.read_bytes()
     manifest=dict(schema=1,kind='ae_import',config=c,clip={k:v for k,v in clip.items() if k not in ('atlas','order')},models=rigs,preview=preview_data(clip,c,project,client),source_sha256=project['source_sha256'],selection=project.get('ae_selection'))
+    manifest['export_layout']=export_layout
     added['res/'+prefix+'manifest.json']=json.dumps(manifest,ensure_ascii=False,indent=2).encode()
     engine.write_game_archive(project['source'],target,added=added,excluded=excluded)
     audit=engine.audit_package(target,project['source'],{},client,excluded=excluded)
@@ -702,9 +713,9 @@ def build(project,clip,values,client,outdir,title):
             if n not in excluded:assert z.read(n)==old.read(n)
         for n,data in added.items():assert z.read(n)==data
         assert audit['missing_dependencies']==[]
-    report=dict(artifact=dict(path=str(target),sha256=engine.digest(target),bytes=target.stat().st_size),client=environment,baseline=dict(status='user_confirmed',observer='user'),file_validation=audit,offline_validation=dict(status='partial',scope='Final-package asset readback; preview/export share atlas, UV, dimensions, frame timing, blend and placement. Native shader execution and in-game effect require validation for this hash.'),ae_effect=dict(frames=clip['frames'],fps=c['fps'],blendSrc=5,blendDst=2 if c['blend']=='add' else 6,geometry_frames=clip['frames']*len(variants),geometry_variants=len(variants),mirrored=c['mirror']),in_game_tested=False,whole_vehicle_loading=dict(status='not_tested',reason='New package; user game observation required'))
+    report=dict(artifact=dict(path=str(target),sha256=engine.digest(target),bytes=target.stat().st_size),client=environment,baseline=dict(status='user_confirmed',observer='user'),file_validation=audit,offline_validation=dict(status='partial',scope='Final-package asset readback; export remaps atlas UVs, preserving frame pixels, dimensions, timing, blend and placement. Native shader execution and in-game effect require validation for this hash.'),ae_effect=dict(frames=clip['frames'],fps=c['fps'],blendSrc=5,blendDst=2 if c['blend']=='add' else 6,geometry_frames=len(export_rects)*len(variants),geometry_variants=len(variants),mirrored=c['mirror'],storage={k:v for k,v in export_layout.items() if k not in ('rects','frame_models')}),in_game_tested=False,whole_vehicle_loading=dict(status='not_tested',reason='New package; user game observation required'))
     (outdir/'验证记录.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
-    (outdir/'使用说明.txt').write_text('本包为待实测版本，未自动安装。\n'+PACKAGE_CONFLICT_NOTE+'\n请检查整车加载、完整动画循环、随动、开镜隐藏/恢复、切车清理和 LOD。\n预览与导出共用贴图、尺寸、帧率及混合设置；游戏曝光、泛光和画质仍可能影响外观。\n最终包 SHA256：'+report['artifact']['sha256'],encoding='utf-8-sig')
+    (outdir/'使用说明.txt').write_text('本包为待实测版本，未自动安装。\n'+PACKAGE_CONFLICT_NOTE+'\n请检查整车加载、完整动画循环、随动、开镜隐藏/恢复、切车清理和 LOD。\n导出图集重排原像素并共用相同帧，维持预览的画面尺寸、帧率和混合设置。游戏曝光、泛光和画质仍可能影响外观。\n最终包 SHA256：'+report['artifact']['sha256'],encoding='utf-8-sig')
     return target,report
 
 def bundle_delivery(target,report,project,clip,c,include_project=True):

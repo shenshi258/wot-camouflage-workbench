@@ -82,7 +82,14 @@ class AnimationPipelineTests(unittest.TestCase):
             manifest=json.loads(z.read(next(n for n in z.namelist() if n.endswith('/manifest.json'))))
             self.assertEqual(manifest['config']['animation'],self.values['animation']);self.assertEqual(manifest['clip']['frames'],8)
             with Image.open(io.BytesIO(z.read(next(n for n in z.namelist() if n.endswith('/atlas.dds'))))) as actual,Image.open(expected['atlas']) as image:
-                self.assertEqual(actual.convert('RGBA').tobytes(),image.convert('RGBA').tobytes())
+                actual=actual.convert('RGBA')
+                layout=manifest['export_layout']
+                def pixels(atlas,rect):
+                    w,h=atlas.size
+                    return atlas.crop((round(rect[0]*w-.5),round(rect[1]*h-.5),
+                                       round(rect[2]*w+.5),round(rect[3]*h+.5))).tobytes()
+                for rect,index in zip(expected['rects'],layout['frame_models']):
+                    self.assertEqual(pixels(image,rect),pixels(actual,layout['rects'][index]))
             sequence=ET.fromstring(z.read(next(n for n in z.namelist() if n.endswith('/effect_0.seq'))))
             self.assertEqual(float(sequence.findtext('duration')),1)
             self.assertEqual(z.read('res/vehicles/german/G197_Pz_Kpfw_Neu/test.dds'),b'original')

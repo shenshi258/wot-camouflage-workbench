@@ -92,11 +92,10 @@ class AppearanceTests(unittest.TestCase):
             with patch.object(ae.engine,'client_info',return_value={'kind':'synthetic'}),patch.object(ae.engine,'compile27',side_effect=compile_stub),patch.object(ae.engine,'audit_package',return_value={'missing_dependencies':[]}):
                 target,report=ae.build(self.project,self.clip,values,str(client),self.root/blend,'Appearance')
             with zipfile.ZipFile(target) as z:
-                png=next(n for n in z.namelist() if n.endswith('/atlas.png'))
-                baked=Image.open(io.BytesIO(z.read(png))).convert('RGBA')
-                with Image.open(self.clip['atlas']) as source:self.assertEqual(baked.tobytes(),ae.appearance_rgba(source,values).tobytes())
-                dds=Image.open(io.BytesIO(z.read(png.replace('.png','.dds')))).convert('RGBA')
-                self.assertEqual(baked.tobytes(),dds.tobytes())
+                self.assertFalse(any(n.endswith('/atlas.png') for n in z.namelist()))
+                texture=next(n for n in z.namelist() if n.endswith('/atlas.dds'))
+                with Image.open(io.BytesIO(z.read(texture))) as actual,Image.open(self.clip['atlas']) as source:
+                    self.assertEqual(actual.convert('RGBA').tobytes(),ae.appearance_rgba(source,values).tobytes())
                 visual=ET.fromstring(z.read(next(n for n in z.namelist() if n.endswith('.visual_processed'))))
                 props={p.text.strip():p[0].text for p in visual.findall('.//property') if p.text and len(p)}
                 self.assertEqual([float(x) for x in props['g_tint'].split()],[100,100,100,1])
